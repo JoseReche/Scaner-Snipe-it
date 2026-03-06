@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Inventário Snipe</title>
+
+<script src="https://unpkg.com/html5-qrcode"></script>
+
+<style>
+
+body{
+font-family:Arial;
+text-align:center;
+margin:20px;
+}
+
+#reader{
+width:300px;
+margin:auto;
+}
+
+input{
+font-size:20px;
+padding:10px;
+margin-top:10px;
+}
+
+button{
+font-size:20px;
+padding:10px 20px;
+margin-top:10px;
+}
+
+#equipamento{
+font-size:20px;
+margin-top:15px;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<h2>Inventário Snipe</h2>
+
+<div id="reader"></div>
+
+<div id="equipamento"></div>
+
+<input id="pa" placeholder="Digite a PA destino">
+
+<br>
+
+<button onclick="atualizar()">Atualizar</button>
+
+<script>
+
+let assetID = null
+
+function onScanSuccess(decodedText){
+
+if(decodedText.includes("hardware/")){
+assetID = decodedText.split("hardware/")[1]
+}else{
+assetID = decodedText
+}
+
+buscarEquipamento()
+
+}
+
+function buscarEquipamento(){
+
+fetch("/move-info?asset="+assetID)
+.then(r=>r.json())
+.then(data=>{
+
+document.getElementById("equipamento").innerHTML =
+"Equipamento: <b>"+data.name+"</b><br>ID: "+assetID
+
+})
+
+}
+
+function atualizar(){
+
+let pa = document.getElementById("pa").value
+
+fetch("/move",{
+method:"POST",
+headers:{
+"Content-Type":"application/json"
+},
+body:JSON.stringify({
+asset:assetID,
+pa:pa
+})
+})
+.then(r=>r.json())
+.then(data=>{
+
+alert("Equipamento atualizado!")
+
+// RESETAR CAMPOS
+assetID = null
+document.getElementById("pa").value=""
+document.getElementById("equipamento").innerHTML=""
+
+})
+
+}
+
+const scanner = new Html5QrcodeScanner(
+"reader",
+{fps:10,qrbox:250}
+)
+
+scanner.render(onScanSuccess)
+
+</script>
+
+</body>
+</html>

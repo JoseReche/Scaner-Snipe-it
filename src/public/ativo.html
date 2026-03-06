@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<meta charset="UTF-8">
+<title>Detalhes do Ativo</title>
+
+<style>
+
+body{
+font-family:Arial;
+background:#f4f6f8;
+padding:20px;
+}
+
+.card{
+
+background:white;
+padding:20px;
+border-radius:10px;
+max-width:400px;
+margin:auto;
+
+}
+
+.item{
+margin-bottom:10px;
+}
+
+button{
+
+width:100%;
+padding:12px;
+background:#2563eb;
+color:white;
+border:none;
+border-radius:8px;
+
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="card">
+
+<h2>Ativo</h2>
+
+<div class="item" id="empresa"></div>
+<div class="item" id="marca"></div>
+<div class="item" id="status"></div>
+<div class="item" id="local"></div>
+<div class="item" id="pa"></div>
+
+<input id="novaPA" placeholder="Nova PA">
+
+<button onclick="mover()">Atualizar PA</button>
+
+</div>
+
+<script>
+
+const params = new URLSearchParams(location.search)
+
+const asset = params.get("id")
+
+fetch("/asset/"+asset)
+.then(r=>r.json())
+.then(data=>{
+
+document.getElementById("empresa").innerHTML =
+"<b>Empresa:</b> "+data.empresa
+
+document.getElementById("marca").innerHTML =
+"<b>Marca:</b> "+data.marca
+
+document.getElementById("status").innerHTML =
+"<b>Situação:</b> "+data.status
+
+document.getElementById("local").innerHTML =
+"<b>Local:</b> "+data.local
+
+document.getElementById("pa").innerHTML =
+"<b>PA:</b> "+data.pa
+
+})
+
+function mover(){
+
+let pa = document.getElementById("novaPA").value
+
+fetch("/move",{
+method:"POST",
+headers:{
+"Content-Type":"application/json"
+},
+body:JSON.stringify({
+asset:asset,
+pa:pa
+})
+})
+.then(()=>{
+
+alert("Atualizado")
+
+})
+
+}
+
+</script>
+
+</body>
+</html>
