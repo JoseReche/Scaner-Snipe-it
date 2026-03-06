@@ -1,3 +1,4 @@
+const path = require("path")
 const express = require("express")
 const axios = require("axios")
 const cors = require("cors")
@@ -6,10 +7,11 @@ const app = express()
 
 app.use(cors())
 app.use(express.json())
-app.use(express.static("public"))
+app.use(express.static(path.join(__dirname, "public")))
 
-const SNIPE_URL = "https://SEU-SNIPE/api/v1"
-const API_KEY = "SEU_TOKEN_API"
+const SNIPE_URL = process.env.SNIPE_URL || "https://SEU-SNIPE/api/v1"
+const API_KEY = process.env.SNIPE_API_KEY || "SEU_TOKEN_API"
+const PORT = process.env.PORT || 3000
 
 const headers = {
   Authorization: `Bearer ${API_KEY}`,
@@ -17,14 +19,26 @@ const headers = {
   "Content-Type": "application/json"
 }
 
-app.get("/asset/:id", async (req,res)=>{
+const hasValidConfig =
+  !SNIPE_URL.includes("SEU-SNIPE") &&
+  API_KEY !== "SEU_TOKEN_API"
 
-  try{
+app.use((req, res, next) => {
+  if (!hasValidConfig) {
+    return res.status(500).json({
+      error:
+        "Configure as variáveis SNIPE_URL e SNIPE_API_KEY antes de usar a API"
+    })
+  }
 
-    const response = await axios.get(
-      `${SNIPE_URL}/hardware/${req.params.id}`,
-      {headers}
-    )
+  return next()
+})
+
+app.get("/asset/:id", async (req, res) => {
+  try {
+    const response = await axios.get(`${SNIPE_URL}/hardware/${req.params.id}`, {
+      headers
+    })
 
     const a = response.data
 
@@ -36,63 +50,75 @@ app.get("/asset/:id", async (req,res)=>{
       local: a.location?.name,
       pa: a.rtd_location?.name
     })
-
-  }catch(e){
-    res.status(500).json({error:"Erro ao buscar ativo"})
+  } catch (e) {
+    res.status(500).json({ error: "Erro ao buscar ativo" })
   }
-
 })
 
-app.post("/move", async (req,res)=>{
+app.get("/move-info", async (req, res) => {
+  const { asset } = req.query
 
-  const {asset, pa} = req.body
+  if (!asset) {
+    return res.status(400).json({ error: "Informe o parâmetro asset" })
+  }
 
-  try{
+  try {
+    const response = await axios.get(`${SNIPE_URL}/hardware/${asset}`, { headers })
 
+    return res.json({
+      id: response.data.id,
+      name: response.data.name,
+      currentPA: response.data.rtd_location?.name || null
+    })
+  } catch (e) {
+    return res.status(500).json({ error: "Erro ao buscar dados para movimentação" })
+  }
+})
+
+app.post("/move", async (req, res) => {
+  const { asset, pa } = req.body
+
+  if (!asset || !pa) {
+    return res.status(400).json({ error: "Campos asset e pa são obrigatórios" })
+  }
+
+  try {
     await axios.patch(
       `${SNIPE_URL}/hardware/${asset}`,
       {
         rtd_location_id: pa
       },
-      {headers}
+      { headers }
     )
 
-    res.json({success:true})
-
-  }catch(e){
-
-    res.status(500).json({error:"Erro ao mover ativo"})
-
+    res.json({ success: true })
+  } catch (e) {
+    res.status(500).json({ error: "Erro ao mover ativo" })
   }
-
 })
 
-app.post("/checkout", async (req,res)=>{
+app.post("/checkout", async (req, res) => {
+  const { asset, user } = req.body
 
-  const {asset,user} = req.body
+  if (!asset || !user) {
+    return res.status(400).json({ error: "Campos asset e user são obrigatórios" })
+  }
 
-  try{
-
+  try {
     await axios.post(
       `${SNIPE_URL}/hardware/${asset}/checkout`,
       {
         assigned_user: user
       },
-      {headers}
+      { headers }
     )
 
-    res.json({success:true})
-
-  }catch(e){
-
-    res.status(500).json({error:"Erro no checkout"})
-
+    res.json({ success: true })
+  } catch (e) {
+    res.status(500).json({ error: "Erro no checkout" })
   }
-
 })
 
-app.listen(3000,()=>{
-
-  console.log("Servidor rodando porta 3000")
-
+app.listen(PORT, () => {
+  console.log(`Servidor rodando na porta ${PORT}`)
 })

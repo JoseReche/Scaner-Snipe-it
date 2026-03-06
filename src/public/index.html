@@ -76,9 +76,16 @@ fetch("/move-info?asset="+assetID)
 .then(r=>r.json())
 .then(data=>{
 
-document.getElementById("equipamento").innerHTML =
-"Equipamento: <b>"+data.name+"</b><br>ID: "+assetID
+if(data.error){
+throw new Error(data.error)
+}
 
+document.getElementById("equipamento").innerHTML =
+"Equipamento: <b>"+data.name+"</b><br>ID: "+assetID+"<br>PA atual: "+(data.currentPA || "-")
+
+})
+.catch(e=>{
+alert(e.message)
 })
 
 }
@@ -100,6 +107,10 @@ pa:pa
 .then(r=>r.json())
 .then(data=>{
 
+if(data.error){
+throw new Error(data.error)
+}
+
 alert("Equipamento atualizado!")
 
 // RESETAR CAMPOS
@@ -107,6 +118,9 @@ assetID = null
 document.getElementById("pa").value=""
 document.getElementById("equipamento").innerHTML=""
 
+})
+.catch(e=>{
+alert(e.message)
 })
 
 }
