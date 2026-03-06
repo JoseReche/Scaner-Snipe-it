@@ -1,7 +1,10 @@
 const path = require("path")
+const dotenv = require("dotenv")
 const express = require("express")
 const axios = require("axios")
 const cors = require("cors")
+
+dotenv.config({ path: path.join(__dirname, "..", ".env") })
 
 const app = express()
 
@@ -27,7 +30,7 @@ app.use((req, res, next) => {
   if (!hasValidConfig) {
     return res.status(500).json({
       error:
-        "Configure as variáveis SNIPE_URL e SNIPE_API_KEY antes de usar a API"
+        "Configure as variáveis SNIPE_URL e SNIPE_API_KEY no arquivo .env antes de usar a API"
     })
   }
 

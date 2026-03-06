@@ -4,18 +4,26 @@ Aplicação simples para consultar ativos do Snipe-IT, mover PA e fazer checkout
 
 ## Configuração
 
-Defina as variáveis de ambiente antes de rodar:
+1. Copie o arquivo de exemplo:
+
+```bash
+cp .env.example .env
+```
+
+2. Edite o `.env` com seus dados:
 
 - `SNIPE_URL` (exemplo: `https://meu-snipe-it/api/v1`)
 - `SNIPE_API_KEY`
 - `PORT` (opcional, padrão `3000`)
 
+> O arquivo `.env` está no `.gitignore` para não vazar senha/chave no Git.
+
 ## Executar
 
 ```bash
 cd src
-npm install express axios cors
-SNIPE_URL="https://meu-snipe-it/api/v1" SNIPE_API_KEY="seu_token" node server.js
+npm install
+npm start
 ```
 
 Depois acesse:
