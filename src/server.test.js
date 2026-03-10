@@ -66,6 +66,27 @@ test('buildAssetPayload monta payload flat com custom fields no formato aceito p
   axios.get = originalGet
 })
 
+test('buildAssetPayload usa db_column quando o custom field não expõe a propriedade field', async () => {
+  const originalGet = axios.get
+
+  axios.get = async () => ({
+    data: {
+      ...baseAsset,
+      custom_fields: {
+        PA: { db_column: '_snipeit_pa_6', value: 'PA-OLD' }
+      }
+    }
+  })
+
+  const payload = await buildAssetPayload(10, {
+    pa: 'PA-NEW'
+  })
+
+  assert.equal(payload._snipeit_pa_6, 'PA-NEW')
+
+  axios.get = originalGet
+})
+
 test('PATCH /asset/:id aplica atualização e devolve ativo mapeado', async () => {
   const originalGet = axios.get
   const originalPatch = axios.patch

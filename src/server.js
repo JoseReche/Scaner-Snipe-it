@@ -15,6 +15,7 @@ app.use(express.static(path.join(__dirname, "public")))
 const SNIPE_URL = process.env.SNIPE_URL || "https://SEU-SNIPE/api/v1"
 const API_KEY = process.env.SNIPE_API_KEY || "SEU_TOKEN_API"
 const PORT = process.env.PORT || 3000
+const DEFAULT_PA_FIELD_KEY = process.env.SNIPE_PA_FIELD_KEY || "_snipeit_pa_6"
 
 const headers = {
   Authorization: `Bearer ${API_KEY}`,
@@ -120,6 +121,10 @@ const findPaCustomFieldKey = (asset) => {
       return config.field
     }
 
+    if (typeof config.db_column === "string" && config.db_column.trim()) {
+      return config.db_column
+    }
+
     return label
   }
 
@@ -137,8 +142,10 @@ const mapCustomFieldLabelToKey = (asset) => {
       mapping[normalizedLabel.toLowerCase()] = normalizedLabel
     }
 
-    if (typeof config.field === "string" && config.field.trim()) {
-      const fieldKey = config.field.trim()
+    const rawFieldKey = config.field || config.db_column
+
+    if (typeof rawFieldKey === "string" && rawFieldKey.trim()) {
+      const fieldKey = rawFieldKey.trim()
 
       mapping[fieldKey] = fieldKey
       mapping[fieldKey.toLowerCase()] = fieldKey
@@ -256,13 +263,9 @@ const buildAssetPayload = async (assetId, body) => {
   const customFieldMapping = mapCustomFieldLabelToKey(currentAsset)
 
   if (body.pa !== undefined && body.pa !== "") {
-    const paFieldKey = findPaCustomFieldKey(currentAsset)
+    const paFieldKey = findPaCustomFieldKey(currentAsset) || DEFAULT_PA_FIELD_KEY
 
-    if (paFieldKey) {
-      customFields[paFieldKey] = body.pa
-    } else {
-      customFields.PA = body.pa
-    }
+    customFields[paFieldKey] = body.pa
   }
 
   for (const [fieldName, value] of Object.entries(customFields)) {
