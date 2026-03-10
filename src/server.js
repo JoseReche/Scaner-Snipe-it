@@ -121,6 +121,33 @@ const findPaCustomFieldKey = (asset) => {
   return null
 }
 
+const mapCustomFieldLabelToKey = (asset) => {
+  const mapping = {}
+
+  for (const [label, config] of Object.entries(asset.custom_fields || {})) {
+    const normalizedLabel = label.trim()
+
+    if (normalizedLabel) {
+      mapping[normalizedLabel] = normalizedLabel
+      mapping[normalizedLabel.toLowerCase()] = normalizedLabel
+    }
+
+    if (typeof config.field === "string" && config.field.trim()) {
+      const fieldKey = config.field.trim()
+
+      mapping[fieldKey] = fieldKey
+      mapping[fieldKey.toLowerCase()] = fieldKey
+
+      if (normalizedLabel) {
+        mapping[normalizedLabel] = fieldKey
+        mapping[normalizedLabel.toLowerCase()] = fieldKey
+      }
+    }
+  }
+
+  return mapping
+}
+
 const extractSnipeError = (error, fallback) => {
   const snipeError = error.response?.data?.messages || error.response?.data?.error
 
@@ -158,10 +185,11 @@ const buildAssetPayload = async (assetId, body) => {
     }
   }
 
+  const currentAsset = await fetchAssetById(assetId)
   const customFields = { ...(body.custom_fields || {}) }
+  const customFieldMapping = mapCustomFieldLabelToKey(currentAsset)
 
   if (body.pa !== undefined && body.pa !== "") {
-    const currentAsset = await fetchAssetById(assetId)
     const paFieldKey = findPaCustomFieldKey(currentAsset)
 
     if (paFieldKey) {
@@ -169,6 +197,17 @@ const buildAssetPayload = async (assetId, body) => {
     } else {
       customFields.PA = body.pa
     }
+  }
+
+  for (const [fieldName, value] of Object.entries(customFields)) {
+    const normalizedName = fieldName.trim()
+
+    if (!normalizedName) {
+      continue
+    }
+
+    const mappedField = customFieldMapping[normalizedName] || customFieldMapping[normalizedName.toLowerCase()] || normalizedName
+    payload[mappedField] = value
   }
 
   if (Object.keys(customFields).length > 0) {
@@ -245,21 +284,16 @@ app.get("/options", async (_req, res) => {
 
 app.post("/move", async (req, res) => {
   const { asset, pa } = req.body
-  const parsedPa = parseIntegerField(pa)
 
-  if (!asset || !pa) {
+  if (asset === undefined || asset === null || asset === "" || pa === undefined || pa === null || pa === "") {
     return res.status(400).json({ error: "Campos asset e pa são obrigatórios" })
-  }
-
-  if (parsedPa === undefined) {
-    return res.status(400).json({ error: "PA deve ser um ID numérico de localização RTD" })
   }
 
   try {
     await axios.patch(
       `${SNIPE_URL}/hardware/${asset}`,
       {
-        rtd_location_id: parsedPa
+        rtd_location_id: pa
       },
       { headers }
     )
