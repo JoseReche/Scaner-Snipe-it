@@ -148,22 +148,83 @@ const mapCustomFieldLabelToKey = (asset) => {
   return mapping
 }
 
-const extractSnipeError = (error, fallback) => {
-  const snipeError = error.response?.data?.messages || error.response?.data?.error
+// Centraliza logs de debug para facilitar a identificação da causa raiz
+// quando a API do Snipe-IT retornar uma falha.
+const logApiError = (context, error) => {
+  const status = error.response?.status
+  const statusText = error.response?.statusText
+  const method = error.config?.method?.toUpperCase()
+  const url = error.config?.url
+  const responseData = error.response?.data
+  const requestPayload = error.config?.data
 
-  if (typeof snipeError === "string" && snipeError.trim()) {
-    return `${fallback}: ${snipeError}`
+  console.error(`[${context}] Falha na API Snipe-IT`)
+
+  if (method || url) {
+    console.error(`[${context}] Requisição: ${method || "-"} ${url || "-"}`)
   }
 
-  if (snipeError && typeof snipeError === "object") {
-    const details = Object.values(snipeError).flat().filter(Boolean).join("; ")
-
-    if (details) {
-      return `${fallback}: ${details}`
-    }
+  if (status || statusText) {
+    console.error(`[${context}] Status: ${status || "-"} ${statusText || ""}`)
   }
 
-  return fallback
+  if (requestPayload) {
+    console.error(`[${context}] Payload enviado:`, requestPayload)
+  }
+
+  if (responseData) {
+    console.error(`[${context}] Resposta da API:`, responseData)
+  } else {
+    console.error(`[${context}] Mensagem original:`, error.message)
+  }
+}
+
+
+const normalizeSnipeMessages = (raw) => {
+  if (!raw) {
+    return []
+  }
+
+  if (Array.isArray(raw)) {
+    return raw.filter((item) => item !== undefined && item !== null).map((item) => String(item))
+  }
+
+  if (typeof raw === "string") {
+    const message = raw.trim()
+
+    return message ? [message] : []
+  }
+
+  if (typeof raw === "object") {
+    return Object.entries(raw)
+      .flatMap(([field, value]) => {
+        if (Array.isArray(value)) {
+          return value.map((item) => `${field}: ${item}`)
+        }
+
+        if (value === undefined || value === null || value === "") {
+          return []
+        }
+
+        return [`${field}: ${value}`]
+      })
+      .filter(Boolean)
+      .map((item) => String(item))
+  }
+
+  return [String(raw)]
+}
+
+const buildClientError = (error, fallback) => {
+  const snipeRaw = error.response?.data?.messages || error.response?.data?.error || error.message
+  const messages = normalizeSnipeMessages(snipeRaw)
+  const composedMessage = messages.length > 0 ? `${fallback}: ${messages.join('; ')}` : fallback
+
+  return {
+    error: composedMessage,
+    messages,
+    status: error.response?.status || 500
+  }
 }
 
 // Centraliza logs de debug para facilitar a identificação da causa raiz
@@ -270,7 +331,7 @@ app.get("/asset/:id", async (req, res) => {
   } catch (e) {
     // Ponto de debug do endpoint de consulta de ativo.
     logApiError("GET /asset/:id", e)
-    return res.status(500).json({ error: extractSnipeError(e, "Erro ao buscar ativo") })
+    return res.status(500).json(buildClientError(e, "Erro ao buscar ativo"))
   }
 })
 
@@ -295,7 +356,7 @@ app.get("/move-info", async (req, res) => {
   } catch (e) {
     // Ponto de debug para entender falhas ao carregar dados de movimentação.
     logApiError("GET /move-info", e)
-    return res.status(500).json({ error: extractSnipeError(e, "Erro ao buscar dados para movimentação") })
+    return res.status(500).json(buildClientError(e, "Erro ao buscar dados para movimentação"))
   }
 })
 
@@ -313,7 +374,7 @@ app.get("/options", async (_req, res) => {
   } catch (e) {
     // Ponto de debug para capturar erro de listagem de opções auxiliares.
     logApiError("GET /options", e)
-    return res.status(500).json({ error: extractSnipeError(e, "Erro ao buscar listas de status e local") })
+    return res.status(500).json(buildClientError(e, "Erro ao buscar listas de status e local"))
   }
 })
 
@@ -338,7 +399,7 @@ app.post("/move", async (req, res) => {
   } catch (e) {
     // Ponto de debug no fluxo de movimentação de ativo.
     logApiError("POST /move", e)
-    return res.status(500).json({ error: extractSnipeError(e, "Erro ao mover ativo") })
+    return res.status(500).json(buildClientError(e, "Erro ao mover ativo"))
   }
 })
 
@@ -355,7 +416,7 @@ app.patch("/asset/:id", async (req, res) => {
       return res.status(400).json({ error: e.message })
     }
 
-    return res.status(500).json({ error: extractSnipeError(e, "Erro ao identificar o campo PA") })
+    return res.status(500).json(buildClientError(e, "Erro ao identificar o campo PA"))
   }
 
   try {
@@ -366,7 +427,7 @@ app.patch("/asset/:id", async (req, res) => {
   } catch (e) {
     // Ponto de debug na atualização do ativo no Snipe-IT.
     logApiError("PATCH /asset/:id", e)
-    return res.status(500).json({ error: extractSnipeError(e, "Erro ao atualizar ativo") })
+    return res.status(500).json(buildClientError(e, "Erro ao atualizar ativo"))
   }
 })
 
@@ -390,7 +451,7 @@ app.post("/checkout", async (req, res) => {
   } catch (e) {
     // Ponto de debug para problemas no checkout do ativo.
     logApiError("POST /checkout", e)
-    return res.status(500).json({ error: extractSnipeError(e, "Erro no checkout") })
+    return res.status(500).json(buildClientError(e, "Erro no checkout"))
   }
 })
 
