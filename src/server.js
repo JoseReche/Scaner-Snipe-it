@@ -240,7 +240,7 @@ const buildClientError = (error, fallback) => {
 }
 
 const buildAssetPayload = async (assetId, body) => {
-  const allowedTextFields = ["name", "serial", "notes"]
+  const allowedTextFields = ["notes"]
   const allowedIntegerFields = ["location_id", "rtd_location_id", "status_id", "model_id", "company_id"]
   const payload = {}
 
