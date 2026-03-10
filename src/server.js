@@ -227,37 +227,6 @@ const buildClientError = (error, fallback) => {
   }
 }
 
-// Centraliza logs de debug para facilitar a identificação da causa raiz
-// quando a API do Snipe-IT retornar uma falha.
-const logApiError = (context, error) => {
-  const status = error.response?.status
-  const statusText = error.response?.statusText
-  const method = error.config?.method?.toUpperCase()
-  const url = error.config?.url
-  const responseData = error.response?.data
-  const requestPayload = error.config?.data
-
-  console.error(`[${context}] Falha na API Snipe-IT`)
-
-  if (method || url) {
-    console.error(`[${context}] Requisição: ${method || "-"} ${url || "-"}`)
-  }
-
-  if (status || statusText) {
-    console.error(`[${context}] Status: ${status || "-"} ${statusText || ""}`)
-  }
-
-  if (requestPayload) {
-    console.error(`[${context}] Payload enviado:`, requestPayload)
-  }
-
-  if (responseData) {
-    console.error(`[${context}] Resposta da API:`, responseData)
-  } else {
-    console.error(`[${context}] Mensagem original:`, error.message)
-  }
-}
-
 const buildAssetPayload = async (assetId, body) => {
   const allowedTextFields = ["name", "serial", "notes"]
   const allowedIntegerFields = ["location_id", "rtd_location_id", "status_id", "model_id", "company_id"]
