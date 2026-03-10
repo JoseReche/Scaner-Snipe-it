@@ -4,7 +4,8 @@
   "description": "Consulta e movimentação de ativos no Snipe-IT",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "npm run check && node server.js",
+    "check": "node --check server.js"
   },
   "keywords": [
     "snipe-it",
