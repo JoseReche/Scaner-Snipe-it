@@ -135,13 +135,7 @@ code {
         </div>
 
         <h3 style="margin-top:16px">Atualização rápida</h3>
-        <p class="small">Campos permitidos no update: <code>name</code>, <code>serial</code>, <code>status_id</code>, <code>location_id</code>, <code>rtd_location_id</code>, <code>notes</code> e <code>custom_fields.PA</code>.</p>
-
-        <label for="editName">Nome</label>
-        <input id="editName" placeholder="Nome do ativo">
-
-        <label for="editSerial">Serial</label>
-        <input id="editSerial" placeholder="Serial">
+        <p class="small">Nome e serial são apenas para visualização. Campos permitidos no update: <code>status_id</code>, <code>location_id</code>, <code>rtd_location_id</code>, <code>notes</code> e <code>custom_fields.PA</code>.</p>
 
         <label for="editPA">PA (campo customizado)</label>
         <input id="editPA" placeholder="Ex.: PA-123">
@@ -233,8 +227,6 @@ function fillPanel(asset) {
   byId("view-pa").textContent = asset.pa ?? "-"
   byId("view-mac").textContent = asset.customFields?.["MAC Address"] ?? "-"
 
-  byId("editName").value = asset.name ?? ""
-  byId("editSerial").value = asset.serial ?? ""
   byId("editPA").value = asset.customFields?.PA ?? ""
   fillSelect("editStatus", statusOptions, asset.statusId, "Selecione um status")
   fillSelect("editLocation", locationOptions, asset.locationId, "Selecione um local")
@@ -277,8 +269,6 @@ async function saveAsset() {
   }
 
   const payload = {
-    name: byId("editName").value,
-    serial: byId("editSerial").value,
     pa: byId("editPA").value,
     status_id: byId("editStatus").value,
     location_id: byId("editLocation").value,

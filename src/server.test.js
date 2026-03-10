@@ -45,19 +45,20 @@ test('findPaCustomFieldKey identifica o field key real do PA', () => {
   assert.equal(findPaCustomFieldKey(baseAsset), '_snipeit_pa_1')
 })
 
-test('buildAssetPayload monta payload flat com custom fields no formato aceito pelo Snipe-IT', async () => {
+test('buildAssetPayload ignora name/serial e monta payload flat com custom fields', async () => {
   const originalGet = axios.get
 
   axios.get = async () => ({ data: baseAsset })
 
   const payload = await buildAssetPayload(10, {
-    name: 'Notebook Atualizado',
+    serial: 'S2',
     pa: 'PA-NEW',
     status_id: '5',
     custom_fields: { 'MAC Address': 'CC:DD' }
   })
 
-  assert.equal(payload.name, 'Notebook Atualizado')
+  assert.equal(payload.name, undefined)
+  assert.equal(payload.serial, undefined)
   assert.equal(payload.status_id, 5)
   assert.equal(payload._snipeit_pa_1, 'PA-NEW')
   assert.equal(payload._snipeit_mac_address_2, 'CC:DD')
