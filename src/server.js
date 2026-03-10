@@ -54,6 +54,11 @@ const mapAsset = (asset) => ({
   rtdLocationId: asset.rtd_location?.id || null,
   notes: asset.notes || "",
   pa: customFieldValue(asset, "PA") || asset.rtd_location?.name || null,
+  status_id: asset.status_label?.name || null,
+  location_id: asset.location || null,
+  custom_fields: {
+    PA: customFieldValue(asset, "PA")
+  },
   customFields: Object.fromEntries(
     Object.entries(asset.custom_fields || {}).map(([key, value]) => [key, value.value ?? null])
   )
