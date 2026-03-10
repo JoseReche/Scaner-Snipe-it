@@ -314,15 +314,8 @@ app.get("/move-info", async (req, res) => {
 
   try {
     const data = await fetchAssetById(asset)
-    const mapped = mapAsset(data)
 
-    return res.json({
-      id: mapped.id,
-      name: mapped.name,
-      currentPA: mapped.pa,
-      rtdLocation: mapped.rtdLocation,
-      status: mapped.status
-    })
+    return res.json(data)
   } catch (e) {
     // Ponto de debug para entender falhas ao carregar dados de movimentação.
     logApiError("GET /move-info", e)
@@ -360,7 +353,7 @@ app.post("/move", async (req, res) => {
     await axios.patch(
       `${SNIPE_URL}/hardware/${asset}`,
       {
-        rtd_location_id: pa
+        _snipeit_pa_6: pa
       },
       { headers }
     )
