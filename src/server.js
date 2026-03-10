@@ -210,6 +210,10 @@ const buildAssetPayload = async (assetId, body) => {
     payload[mappedField] = value
   }
 
+  if (Object.keys(customFields).length > 0) {
+    payload.custom_fields = customFields
+  }
+
   if (Object.keys(payload).length === 0) {
     throw new Error("Nenhum campo válido para atualizar foi enviado")
   }
@@ -280,21 +284,16 @@ app.get("/options", async (_req, res) => {
 
 app.post("/move", async (req, res) => {
   const { asset, pa } = req.body
-  const parsedPa = parseIntegerField(pa)
 
-  if (!asset || !pa) {
+  if (asset === undefined || asset === null || asset === "" || pa === undefined || pa === null || pa === "") {
     return res.status(400).json({ error: "Campos asset e pa são obrigatórios" })
-  }
-
-  if (parsedPa === undefined) {
-    return res.status(400).json({ error: "PA deve ser um ID numérico de localização RTD" })
   }
 
   try {
     await axios.patch(
       `${SNIPE_URL}/hardware/${asset}`,
       {
-        rtd_location_id: parsedPa
+        rtd_location_id: pa
       },
       { headers }
     )
