@@ -171,6 +171,7 @@ app.get("/asset/:id", async (req, res) => {
     return res.json(mapAsset(asset))
   } catch (e) {
     return res.status(500).json({ error: extractSnipeError(e, "Erro ao buscar ativo") })
+    return res.status(500).json({ error: "Erro ao buscar ativo" })
   }
 })
 
@@ -221,6 +222,7 @@ app.post("/move", async (req, res) => {
     return res.json({ success: true })
   } catch (e) {
     return res.status(500).json({ error: extractSnipeError(e, "Erro ao mover ativo") })
+    return res.status(500).json({ error: "Erro ao mover ativo" })
   }
 })
 
@@ -231,6 +233,33 @@ app.patch("/asset/:id", async (req, res) => {
     payload = await buildAssetPayload(req.params.id, req.body)
   } catch (e) {
     return res.status(500).json({ error: extractSnipeError(e, "Erro ao identificar o campo PA") })
+  const allowedFields = [
+    "name",
+    "serial",
+    "notes",
+    "location_id",
+    "rtd_location_id",
+    "status_id",
+    "model_id",
+    "company_id"
+  ]
+
+  const payload = {}
+
+  for (const field of allowedFields) {
+    if (req.body[field] !== undefined && req.body[field] !== "") {
+      payload[field] = req.body[field]
+    }
+  }
+
+  const customFields = { ...(req.body.custom_fields || {}) }
+
+  if (req.body.pa !== undefined && req.body.pa !== "") {
+    customFields.PA = req.body.pa
+  }
+
+  if (Object.keys(customFields).length > 0) {
+    payload.custom_fields = customFields
   }
 
   if (Object.keys(payload).length === 0) {
@@ -244,6 +273,7 @@ app.patch("/asset/:id", async (req, res) => {
     return res.json({ success: true, asset: mapAsset(updatedAsset) })
   } catch (e) {
     return res.status(500).json({ error: extractSnipeError(e, "Erro ao atualizar ativo") })
+    return res.status(500).json({ error: "Erro ao atualizar ativo" })
   }
 })
 
@@ -266,6 +296,7 @@ app.post("/checkout", async (req, res) => {
     return res.json({ success: true })
   } catch (e) {
     return res.status(500).json({ error: extractSnipeError(e, "Erro no checkout") })
+    return res.status(500).json({ error: "Erro no checkout" })
   }
 })
 
