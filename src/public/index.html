@@ -50,7 +50,7 @@ label {
   font-weight: 600;
 }
 
-input, textarea {
+input, textarea, select {
   width: 100%;
   box-sizing: border-box;
   padding: 10px;
@@ -146,14 +146,14 @@ code {
         <label for="editPA">PA (campo customizado)</label>
         <input id="editPA" placeholder="Ex.: PA-123">
 
-        <label for="editStatus">Status ID</label>
-        <input id="editStatus" placeholder="Ex.: 1">
+        <label for="editStatus">Status</label>
+        <select id="editStatus"></select>
 
-        <label for="editLocation">Location ID</label>
-        <input id="editLocation" placeholder="Ex.: 9">
+        <label for="editLocation">Local</label>
+        <select id="editLocation"></select>
 
-        <label for="editRTD">RTD Location ID (posição física)</label>
-        <input id="editRTD" placeholder="Ex.: 12">
+        <label for="editRTD">RTD Location (posição física)</label>
+        <select id="editRTD"></select>
 
         <label for="editNotes">Notas</label>
         <textarea id="editNotes" placeholder="Observações do ativo"></textarea>
@@ -166,8 +166,51 @@ code {
 
 <script>
 let currentAssetId = null
+let statusOptions = []
+let locationOptions = []
 
 const byId = (id) => document.getElementById(id)
+
+function fillSelect(selectId, options, selectedValue, placeholder) {
+  const select = byId(selectId)
+  const normalizedSelected = selectedValue === null || selectedValue === undefined ? "" : String(selectedValue)
+
+  select.innerHTML = ""
+
+  const emptyOption = document.createElement("option")
+  emptyOption.value = ""
+  emptyOption.textContent = placeholder
+  select.appendChild(emptyOption)
+
+  options.forEach((option) => {
+    const el = document.createElement("option")
+    el.value = option.id
+    el.textContent = `${option.id} - ${option.name}`
+    select.appendChild(el)
+  })
+
+  if (normalizedSelected && options.some((option) => String(option.id) === normalizedSelected)) {
+    select.value = normalizedSelected
+  } else {
+    select.value = ""
+  }
+}
+
+async function loadOptions() {
+  const response = await fetch("/options")
+  const data = await response.json()
+
+  if (!response.ok || data.error) {
+    throw new Error(data.error || "Erro ao carregar listas de status e local")
+  }
+
+  statusOptions = data.statuses || []
+  locationOptions = data.locations || []
+
+  fillSelect("editStatus", statusOptions, null, "Selecione um status")
+  fillSelect("editLocation", locationOptions, null, "Selecione um local")
+  fillSelect("editRTD", locationOptions, null, "Selecione um RTD")
+}
 
 function parseAssetId(raw) {
   if (!raw) return null
@@ -193,9 +236,9 @@ function fillPanel(asset) {
   byId("editName").value = asset.name ?? ""
   byId("editSerial").value = asset.serial ?? ""
   byId("editPA").value = asset.customFields?.PA ?? ""
-  byId("editStatus").value = asset.statusId ?? ""
-  byId("editLocation").value = asset.locationId ?? ""
-  byId("editRTD").value = asset.rtdLocationId ?? ""
+  fillSelect("editStatus", statusOptions, asset.statusId, "Selecione um status")
+  fillSelect("editLocation", locationOptions, asset.locationId, "Selecione um local")
+  fillSelect("editRTD", locationOptions, asset.rtdLocationId, "Selecione um RTD")
   byId("editNotes").value = asset.notes ?? ""
 }
 
@@ -269,6 +312,8 @@ async function saveAsset() {
     saveButton.textContent = "Salvar alterações"
   }
 }
+
+loadOptions().catch((e) => alert(e.message))
 
 const scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 })
 scanner.render(onScanSuccess)
