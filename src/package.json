@@ -5,7 +5,8 @@
   "main": "server.js",
   "scripts": {
     "start": "npm run check && node server.js",
-    "check": "node --check server.js"
+    "check": "node --check server.js",
+    "test": "node --test"
   },
   "keywords": [
     "snipe-it",
