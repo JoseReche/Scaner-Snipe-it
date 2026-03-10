@@ -233,37 +233,6 @@ app.patch("/asset/:id", async (req, res) => {
     payload = await buildAssetPayload(req.params.id, req.body)
   } catch (e) {
     return res.status(500).json({ error: extractSnipeError(e, "Erro ao identificar o campo PA") })
-  const allowedFields = [
-    "name",
-    "serial",
-    "notes",
-    "location_id",
-    "rtd_location_id",
-    "status_id",
-    "model_id",
-    "company_id"
-  ]
-
-  const payload = {}
-
-  for (const field of allowedFields) {
-    if (req.body[field] !== undefined && req.body[field] !== "") {
-      payload[field] = req.body[field]
-    }
-  }
-
-  const customFields = { ...(req.body.custom_fields || {}) }
-
-  if (req.body.pa !== undefined && req.body.pa !== "") {
-    customFields.PA = req.body.pa
-  }
-
-  if (Object.keys(customFields).length > 0) {
-    payload.custom_fields = customFields
-  }
-
-  if (Object.keys(payload).length === 0) {
-    return res.status(400).json({ error: "Nenhum campo válido para atualizar foi enviado" })
   }
 
   try {
