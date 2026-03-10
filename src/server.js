@@ -271,10 +271,6 @@ const buildAssetPayload = async (assetId, body) => {
     payload[mappedField] = value
   }
 
-  if (Object.keys(customFields).length > 0) {
-    payload.custom_fields = customFields
-  }
-
   if (Object.keys(payload).length === 0) {
     throw new Error("Nenhum campo válido para atualizar foi enviado")
   }
@@ -424,6 +420,16 @@ app.post("/checkout", async (req, res) => {
   }
 })
 
-app.listen(PORT, () => {
-  console.log(`Servidor rodando na porta ${PORT}`)
-})
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Servidor rodando na porta ${PORT}`)
+  })
+}
+
+module.exports = {
+  app,
+  buildAssetPayload,
+  mapCustomFieldLabelToKey,
+  parseIntegerField,
+  findPaCustomFieldKey
+}
