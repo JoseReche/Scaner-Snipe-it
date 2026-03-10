@@ -148,7 +148,28 @@ const buildAssetPayload = async (assetId, body) => {
   }
 
   if (Object.keys(customFields).length > 0) {
-    payload.custom_fields = customFields
+    const currentAsset = await fetchAssetById(assetId)
+
+    for (const [fieldKey, value] of Object.entries(customFields)) {
+      if (value === undefined) {
+        continue
+      }
+
+      const normalizedKey = String(fieldKey).trim().toLowerCase()
+      const fieldConfig = Object.entries(currentAsset.custom_fields || {}).find(([label, config]) => {
+        const normalizedLabel = String(label).trim().toLowerCase()
+        const normalizedField = String(config?.field || "").trim().toLowerCase()
+
+        return normalizedLabel === normalizedKey || normalizedField === normalizedKey
+      })?.[1]
+
+      if (typeof fieldConfig?.field === "string" && fieldConfig.field.trim()) {
+        payload[fieldConfig.field] = value
+        continue
+      }
+
+      payload[fieldKey] = value
+    }
   }
 
   return payload
@@ -171,7 +192,6 @@ app.get("/asset/:id", async (req, res) => {
     return res.json(mapAsset(asset))
   } catch (e) {
     return res.status(500).json({ error: extractSnipeError(e, "Erro ao buscar ativo") })
-    return res.status(500).json({ error: "Erro ao buscar ativo" })
   }
 })
 
@@ -222,7 +242,6 @@ app.post("/move", async (req, res) => {
     return res.json({ success: true })
   } catch (e) {
     return res.status(500).json({ error: extractSnipeError(e, "Erro ao mover ativo") })
-    return res.status(500).json({ error: "Erro ao mover ativo" })
   }
 })
 
@@ -242,7 +261,6 @@ app.patch("/asset/:id", async (req, res) => {
     return res.json({ success: true, asset: mapAsset(updatedAsset) })
   } catch (e) {
     return res.status(500).json({ error: extractSnipeError(e, "Erro ao atualizar ativo") })
-    return res.status(500).json({ error: "Erro ao atualizar ativo" })
   }
 })
 
@@ -265,7 +283,6 @@ app.post("/checkout", async (req, res) => {
     return res.json({ success: true })
   } catch (e) {
     return res.status(500).json({ error: extractSnipeError(e, "Erro no checkout") })
-    return res.status(500).json({ error: "Erro no checkout" })
   }
 })
 
