@@ -44,3 +44,21 @@ npm run check
 ```
 
 Isso valida o `server.js` antes de subir o servidor e ajuda a identificar rapidamente arquivo quebrado por conflito de merge.
+
+## App mobile em Flutter
+
+Foi adicionado um app Flutter em `mobile_app/` com três fluxos principais:
+
+- Consulta de ativo por ID (`GET /asset/:id`)
+- Movimentação de PA (`POST /move`)
+- Checkout de ativo para usuário (`POST /checkout`)
+
+### Como executar o app Flutter
+
+```bash
+cd mobile_app
+flutter pub get
+flutter run
+```
+
+> No Android Emulator, mantenha a URL padrão `http://10.0.2.2:3000` para acessar a API local.
