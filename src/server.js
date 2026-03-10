@@ -36,14 +36,14 @@ app.use((req, res, next) => {
   next()
 })
 
+const validateId = (id) => !isNaN(id)
+
 const customFieldValue = (asset, fieldName) => {
   const field = asset.custom_fields?.[fieldName]
 
   if (!field) return null
 
-  if (typeof field === "object") {
-    return field.value ?? null
-  }
+  if (typeof field === "object") return field.value ?? null
 
   return field
 }
@@ -81,16 +81,12 @@ app.use((req, res, next) => {
   if (!hasValidConfig) {
     return res.status(500).json({
       error:
-        "Configure SNIPE_URL e SNIPE_API_KEY no arquivo .env antes de usar a API"
+        "Configure SNIPE_URL e SNIPE_API_KEY no arquivo .env"
     })
   }
 
   next()
 })
-
-const validateId = (id) => {
-  return !isNaN(id)
-}
 
 app.get("/asset/:id", async (req, res) => {
   if (!validateId(req.params.id)) {
@@ -99,6 +95,7 @@ app.get("/asset/:id", async (req, res) => {
 
   try {
     const asset = await fetchAssetById(req.params.id)
+
     res.json(mapAsset(asset))
   } catch (e) {
     console.error(e.response?.data || e.message)
@@ -113,7 +110,9 @@ app.get("/move-info", async (req, res) => {
   const { asset } = req.query
 
   if (!asset) {
-    return res.status(400).json({ error: "Informe o parâmetro asset" })
+    return res.status(400).json({
+      error: "Informe o parâmetro asset"
+    })
   }
 
   if (!validateId(asset)) {
@@ -154,7 +153,12 @@ app.post("/move", async (req, res) => {
       rtd_location_id: pa
     })
 
+    console.log("PAYLOAD MOVE:", { asset, pa })
     console.log("SNIPE RESPONSE:", response.data)
+
+    if (response.data.status === "error") {
+      return res.status(400).json(response.data)
+    }
 
     res.json({
       success: true,
@@ -163,57 +167,76 @@ app.post("/move", async (req, res) => {
   } catch (e) {
     console.error(e.response?.data || e.message)
 
-    res.status(500).json({
+    res.status(e.response?.status || 500).json({
       error: e.response?.data || "Erro ao mover ativo"
     })
   }
 })
 
 app.patch("/asset/:id", async (req, res) => {
-  if (!validateId(req.params.id)) {
+  const id = req.params.id
+
+  if (!validateId(id)) {
     return res.status(400).json({ error: "ID inválido" })
   }
 
-  const allowedFields = [
-    "name",
-    "serial",
-    "notes",
-    "location_id",
-    "rtd_location_id",
-    "status_id",
-    "model_id",
-    "company_id"
-  ]
-
-  const payload = {}
-
-  for (const field of allowedFields) {
-    if (req.body[field] !== undefined && req.body[field] !== "") {
-      payload[field] = req.body[field]
-    }
-  }
-
-  if (req.body.pa && CUSTOM_FIELD_PA) {
-    payload._customfields = {
-      [CUSTOM_FIELD_PA]: req.body.pa
-    }
-  }
-
-  if (Object.keys(payload).length === 0) {
-    return res.status(400).json({
-      error: "Nenhum campo válido enviado"
-    })
-  }
-
   try {
-    const response = await api.patch(
-      `/hardware/${req.params.id}`,
-      payload
-    )
+    const currentAsset = await fetchAssetById(id)
+
+    const allowedFields = [
+      "name",
+      "serial",
+      "notes",
+      "location_id",
+      "rtd_location_id",
+      "status_id",
+      "model_id",
+      "company_id"
+    ]
+
+    const payload = {}
+
+    for (const field of allowedFields) {
+
+      if (req.body[field] === undefined || req.body[field] === "") {
+        continue
+      }
+
+      if (field === "serial") {
+
+        if (req.body.serial === currentAsset.serial) {
+          continue
+        }
+
+      }
+
+      payload[field] = req.body[field]
+
+    }
+
+    if (req.body.pa && CUSTOM_FIELD_PA) {
+      payload._customfields = {
+        [CUSTOM_FIELD_PA]: req.body.pa
+      }
+    }
+
+    if (Object.keys(payload).length === 0) {
+      return res.status(400).json({
+        error: "Nenhum campo válido enviado"
+      })
+    }
+
+    console.log("PAYLOAD UPDATE:", payload)
+
+    const response = await api.patch(`/hardware/${id}`, payload)
 
     console.log("SNIPE UPDATE RESPONSE:", response.data)
 
-    const updatedAsset = await fetchAssetById(req.params.id)
+    if (response.data.status === "error") {
+      return res.status(400).json(response.data)
+    }
+
+    const updatedAsset = await fetchAssetById(id)
 
     res.json({
       success: true,
@@ -244,6 +267,10 @@ app.post("/checkout", async (req, res) => {
     })
 
     console.log("CHECKOUT RESPONSE:", response.data)
+
+    if (response.data.status === "error") {
+      return res.status(400).json(response.data)
+    }
 
     res.json({
       success: true,
