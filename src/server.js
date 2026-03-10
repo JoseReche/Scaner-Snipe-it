@@ -121,6 +121,33 @@ const findPaCustomFieldKey = (asset) => {
   return null
 }
 
+const mapCustomFieldLabelToKey = (asset) => {
+  const mapping = {}
+
+  for (const [label, config] of Object.entries(asset.custom_fields || {})) {
+    const normalizedLabel = label.trim()
+
+    if (normalizedLabel) {
+      mapping[normalizedLabel] = normalizedLabel
+      mapping[normalizedLabel.toLowerCase()] = normalizedLabel
+    }
+
+    if (typeof config.field === "string" && config.field.trim()) {
+      const fieldKey = config.field.trim()
+
+      mapping[fieldKey] = fieldKey
+      mapping[fieldKey.toLowerCase()] = fieldKey
+
+      if (normalizedLabel) {
+        mapping[normalizedLabel] = fieldKey
+        mapping[normalizedLabel.toLowerCase()] = fieldKey
+      }
+    }
+  }
+
+  return mapping
+}
+
 const extractSnipeError = (error, fallback) => {
   const snipeError = error.response?.data?.messages || error.response?.data?.error
 
@@ -158,10 +185,11 @@ const buildAssetPayload = async (assetId, body) => {
     }
   }
 
+  const currentAsset = await fetchAssetById(assetId)
   const customFields = { ...(body.custom_fields || {}) }
+  const customFieldMapping = mapCustomFieldLabelToKey(currentAsset)
 
   if (body.pa !== undefined && body.pa !== "") {
-    const currentAsset = await fetchAssetById(assetId)
     const paFieldKey = findPaCustomFieldKey(currentAsset)
 
     if (paFieldKey) {
@@ -171,8 +199,15 @@ const buildAssetPayload = async (assetId, body) => {
     }
   }
 
-  if (Object.keys(customFields).length > 0) {
-    payload.custom_fields = customFields
+  for (const [fieldName, value] of Object.entries(customFields)) {
+    const normalizedName = fieldName.trim()
+
+    if (!normalizedName) {
+      continue
+    }
+
+    const mappedField = customFieldMapping[normalizedName] || customFieldMapping[normalizedName.toLowerCase()] || normalizedName
+    payload[mappedField] = value
   }
 
   if (Object.keys(payload).length === 0) {
