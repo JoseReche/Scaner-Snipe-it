@@ -15,6 +15,7 @@ app.use(express.static(path.join(__dirname, "public")))
 const SNIPE_URL = process.env.SNIPE_URL || "https://SEU-SNIPE/api/v1"
 const API_KEY = process.env.SNIPE_API_KEY || "SEU_TOKEN_API"
 const PORT = process.env.PORT || 3000
+const DEFAULT_PA_FIELD_KEY = process.env.SNIPE_PA_FIELD_KEY || "_snipeit_pa_6"
 
 const headers = {
   Authorization: `Bearer ${API_KEY}`,
@@ -54,6 +55,11 @@ const mapAsset = (asset) => ({
   rtdLocationId: asset.rtd_location?.id || null,
   notes: asset.notes || "",
   pa: customFieldValue(asset, "PA") || asset.rtd_location?.name || null,
+  status_id: asset.status_label?.name || null,
+  location_id: asset.location || null,
+  custom_fields: {
+    PA: customFieldValue(asset, "PA")
+  },
   customFields: Object.fromEntries(
     Object.entries(asset.custom_fields || {}).map(([key, value]) => [key, value.value ?? null])
   )
@@ -115,32 +121,126 @@ const findPaCustomFieldKey = (asset) => {
       return config.field
     }
 
+    if (typeof config.db_column === "string" && config.db_column.trim()) {
+      return config.db_column
+    }
+
     return label
   }
 
   return null
 }
 
-const extractSnipeError = (error, fallback) => {
-  const snipeError = error.response?.data?.messages || error.response?.data?.error
+const mapCustomFieldLabelToKey = (asset) => {
+  const mapping = {}
 
-  if (typeof snipeError === "string" && snipeError.trim()) {
-    return `${fallback}: ${snipeError}`
-  }
+  for (const [label, config] of Object.entries(asset.custom_fields || {})) {
+    const normalizedLabel = label.trim()
 
-  if (snipeError && typeof snipeError === "object") {
-    const details = Object.values(snipeError).flat().filter(Boolean).join("; ")
+    if (normalizedLabel) {
+      mapping[normalizedLabel] = normalizedLabel
+      mapping[normalizedLabel.toLowerCase()] = normalizedLabel
+    }
 
-    if (details) {
-      return `${fallback}: ${details}`
+    const rawFieldKey = config.field || config.db_column
+
+    if (typeof rawFieldKey === "string" && rawFieldKey.trim()) {
+      const fieldKey = rawFieldKey.trim()
+
+      mapping[fieldKey] = fieldKey
+      mapping[fieldKey.toLowerCase()] = fieldKey
+
+      if (normalizedLabel) {
+        mapping[normalizedLabel] = fieldKey
+        mapping[normalizedLabel.toLowerCase()] = fieldKey
+      }
     }
   }
 
-  return fallback
+  return mapping
+}
+
+// Centraliza logs de debug para facilitar a identificação da causa raiz
+// quando a API do Snipe-IT retornar uma falha.
+const logApiError = (context, error) => {
+  const status = error.response?.status
+  const statusText = error.response?.statusText
+  const method = error.config?.method?.toUpperCase()
+  const url = error.config?.url
+  const responseData = error.response?.data
+  const requestPayload = error.config?.data
+
+  console.error(`[${context}] Falha na API Snipe-IT`)
+
+  if (method || url) {
+    console.error(`[${context}] Requisição: ${method || "-"} ${url || "-"}`)
+  }
+
+  if (status || statusText) {
+    console.error(`[${context}] Status: ${status || "-"} ${statusText || ""}`)
+  }
+
+  if (requestPayload) {
+    console.error(`[${context}] Payload enviado:`, requestPayload)
+  }
+
+  if (responseData) {
+    console.error(`[${context}] Resposta da API:`, responseData)
+  } else {
+    console.error(`[${context}] Mensagem original:`, error.message)
+  }
+}
+
+
+const normalizeSnipeMessages = (raw) => {
+  if (!raw) {
+    return []
+  }
+
+  if (Array.isArray(raw)) {
+    return raw.filter((item) => item !== undefined && item !== null).map((item) => String(item))
+  }
+
+  if (typeof raw === "string") {
+    const message = raw.trim()
+
+    return message ? [message] : []
+  }
+
+  if (typeof raw === "object") {
+    return Object.entries(raw)
+      .flatMap(([field, value]) => {
+        if (Array.isArray(value)) {
+          return value.map((item) => `${field}: ${item}`)
+        }
+
+        if (value === undefined || value === null || value === "") {
+          return []
+        }
+
+        return [`${field}: ${value}`]
+      })
+      .filter(Boolean)
+      .map((item) => String(item))
+  }
+
+  return [String(raw)]
+}
+
+const buildClientError = (error, fallback) => {
+  const snipeRaw = error.response?.data?.messages || error.response?.data?.error || error.message
+  const messages = normalizeSnipeMessages(snipeRaw)
+  const composedMessage = messages.length > 0 ? `${fallback}: ${messages.join('; ')}` : fallback
+
+  return {
+    error: composedMessage,
+    messages,
+    status: error.response?.status || 500
+  }
 }
 
 const buildAssetPayload = async (assetId, body) => {
-  const allowedTextFields = ["name", "serial", "notes"]
+  const allowedTextFields = ["notes"]
   const allowedIntegerFields = ["location_id", "rtd_location_id", "status_id", "model_id", "company_id"]
   const payload = {}
 
@@ -158,21 +258,25 @@ const buildAssetPayload = async (assetId, body) => {
     }
   }
 
+  const currentAsset = await fetchAssetById(assetId)
   const customFields = { ...(body.custom_fields || {}) }
+  const customFieldMapping = mapCustomFieldLabelToKey(currentAsset)
 
   if (body.pa !== undefined && body.pa !== "") {
-    const currentAsset = await fetchAssetById(assetId)
-    const paFieldKey = findPaCustomFieldKey(currentAsset)
+    const paFieldKey = findPaCustomFieldKey(currentAsset) || DEFAULT_PA_FIELD_KEY
 
-    if (paFieldKey) {
-      customFields[paFieldKey] = body.pa
-    } else {
-      customFields.PA = body.pa
-    }
+    customFields[paFieldKey] = body.pa
   }
 
-  if (Object.keys(customFields).length > 0) {
-    payload.custom_fields = customFields
+  for (const [fieldName, value] of Object.entries(customFields)) {
+    const normalizedName = fieldName.trim()
+
+    if (!normalizedName) {
+      continue
+    }
+
+    const mappedField = customFieldMapping[normalizedName] || customFieldMapping[normalizedName.toLowerCase()] || normalizedName
+    payload[mappedField] = value
   }
 
   if (Object.keys(payload).length === 0) {
@@ -198,8 +302,9 @@ app.get("/asset/:id", async (req, res) => {
 
     return res.json(mapAsset(asset))
   } catch (e) {
-    return res.status(500).json({ error: extractSnipeError(e, "Erro ao buscar ativo") })
-    return res.status(500).json({ error: "Erro ao buscar ativo" })
+    // Ponto de debug do endpoint de consulta de ativo.
+    logApiError("GET /asset/:id", e)
+    return res.status(500).json(buildClientError(e, "Erro ao buscar ativo"))
   }
 })
 
@@ -212,17 +317,12 @@ app.get("/move-info", async (req, res) => {
 
   try {
     const data = await fetchAssetById(asset)
-    const mapped = mapAsset(data)
 
-    return res.json({
-      id: mapped.id,
-      name: mapped.name,
-      currentPA: mapped.pa,
-      rtdLocation: mapped.rtdLocation,
-      status: mapped.status
-    })
+    return res.json(data)
   } catch (e) {
-    return res.status(500).json({ error: extractSnipeError(e, "Erro ao buscar dados para movimentação") })
+    // Ponto de debug para entender falhas ao carregar dados de movimentação.
+    logApiError("GET /move-info", e)
+    return res.status(500).json(buildClientError(e, "Erro ao buscar dados para movimentação"))
   }
 })
 
@@ -238,36 +338,34 @@ app.get("/options", async (_req, res) => {
 
     return res.json({ statuses, locations })
   } catch (e) {
-    return res.status(500).json({ error: extractSnipeError(e, "Erro ao buscar listas de status e local") })
+    // Ponto de debug para capturar erro de listagem de opções auxiliares.
+    logApiError("GET /options", e)
+    return res.status(500).json(buildClientError(e, "Erro ao buscar listas de status e local"))
   }
 })
 
 
 app.post("/move", async (req, res) => {
   const { asset, pa } = req.body
-  const parsedPa = parseIntegerField(pa)
 
-  if (!asset || !pa) {
+  if (asset === undefined || asset === null || asset === "" || pa === undefined || pa === null || pa === "") {
     return res.status(400).json({ error: "Campos asset e pa são obrigatórios" })
-  }
-
-  if (parsedPa === undefined) {
-    return res.status(400).json({ error: "PA deve ser um ID numérico de localização RTD" })
   }
 
   try {
     await axios.patch(
       `${SNIPE_URL}/hardware/${asset}`,
       {
-        rtd_location_id: parsedPa
+        _snipeit_pa_6: pa
       },
       { headers }
     )
 
     return res.json({ success: true })
   } catch (e) {
-    return res.status(500).json({ error: extractSnipeError(e, "Erro ao mover ativo") })
-    return res.status(500).json({ error: "Erro ao mover ativo" })
+    // Ponto de debug no fluxo de movimentação de ativo.
+    logApiError("POST /move", e)
+    return res.status(500).json(buildClientError(e, "Erro ao mover ativo"))
   }
 })
 
@@ -277,11 +375,14 @@ app.patch("/asset/:id", async (req, res) => {
   try {
     payload = await buildAssetPayload(req.params.id, req.body)
   } catch (e) {
+    // Ponto de debug na etapa de montagem do payload de atualização.
+    logApiError("PATCH /asset/:id [build payload]", e)
+
     if (e.message === "Nenhum campo válido para atualizar foi enviado") {
       return res.status(400).json({ error: e.message })
     }
 
-    return res.status(500).json({ error: extractSnipeError(e, "Erro ao identificar o campo PA") })
+    return res.status(500).json(buildClientError(e, "Erro ao identificar o campo PA"))
   }
 
   try {
@@ -290,8 +391,9 @@ app.patch("/asset/:id", async (req, res) => {
 
     return res.json({ success: true, asset: mapAsset(updatedAsset) })
   } catch (e) {
-    return res.status(500).json({ error: extractSnipeError(e, "Erro ao atualizar ativo") })
-    return res.status(500).json({ error: "Erro ao atualizar ativo" })
+    // Ponto de debug na atualização do ativo no Snipe-IT.
+    logApiError("PATCH /asset/:id", e)
+    return res.status(500).json(buildClientError(e, "Erro ao atualizar ativo"))
   }
 })
 
@@ -313,11 +415,22 @@ app.post("/checkout", async (req, res) => {
 
     return res.json({ success: true })
   } catch (e) {
-    return res.status(500).json({ error: extractSnipeError(e, "Erro no checkout") })
-    return res.status(500).json({ error: "Erro no checkout" })
+    // Ponto de debug para problemas no checkout do ativo.
+    logApiError("POST /checkout", e)
+    return res.status(500).json(buildClientError(e, "Erro no checkout"))
   }
 })
 
-app.listen(PORT, () => {
-  console.log(`Servidor rodando na porta ${PORT}`)
-})
+if (require.main === module) {
+  app.listen(PORT, () => {
+    console.log(`Servidor rodando na porta ${PORT}`)
+  })
+}
+
+module.exports = {
+  app,
+  buildAssetPayload,
+  mapCustomFieldLabelToKey,
+  parseIntegerField,
+  findPaCustomFieldKey
+}
