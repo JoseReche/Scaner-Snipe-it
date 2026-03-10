@@ -107,3 +107,61 @@ test('PATCH /asset/:id aplica atualização e devolve ativo mapeado', async () =
     axios.patch = originalPatch
   }
 })
+
+test('GET /move-info retorna o payload bruto do Snipe-IT', async () => {
+  const originalGet = axios.get
+
+  axios.get = async (url) => {
+    if (url.endsWith('/hardware/10')) {
+      return { data: baseAsset }
+    }
+
+    throw new Error(`URL inesperada no GET: ${url}`)
+  }
+
+  const server = app.listen(0)
+  const { port } = server.address()
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/move-info?asset=10`)
+    const data = await response.json()
+
+    assert.equal(response.status, 200)
+    assert.equal(data.id, 10)
+    assert.equal(data.custom_fields.PA.value, 'PA-OLD')
+  } finally {
+    server.close()
+    axios.get = originalGet
+  }
+})
+
+test('POST /move atualiza o campo customizado _snipeit_pa_6', async () => {
+  const originalPatch = axios.patch
+  const requests = []
+
+  axios.patch = async (url, payload) => {
+    requests.push({ url, payload })
+    return { data: { status: 'success' } }
+  }
+
+  const server = app.listen(0)
+  const { port } = server.address()
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/move`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ asset: 10, pa: 'PA-NOVO' })
+    })
+    const data = await response.json()
+
+    assert.equal(response.status, 200)
+    assert.equal(data.success, true)
+    assert.equal(requests.length, 1)
+    assert.equal(requests[0].payload._snipeit_pa_6, 'PA-NOVO')
+    assert.equal(requests[0].payload.rtd_location_id, undefined)
+  } finally {
+    server.close()
+    axios.patch = originalPatch
+  }
+})
