@@ -14,28 +14,38 @@ app.use(express.static(path.join(__dirname, "public")))
 
 const SNIPE_URL = process.env.SNIPE_URL || "https://SEU-SNIPE/api/v1"
 const API_KEY = process.env.SNIPE_API_KEY || "SEU_TOKEN_API"
+const CUSTOM_FIELD_PA = process.env.CUSTOM_FIELD_PA
 const PORT = process.env.PORT || 3000
 
-const headers = {
-  Authorization: `Bearer ${API_KEY}`,
-  Accept: "application/json",
-  "Content-Type": "application/json"
-}
+const hasValidConfig =
+  !SNIPE_URL.includes("SEU-SNIPE") &&
+  API_KEY !== "SEU_TOKEN_API"
 
-const hasValidConfig = !SNIPE_URL.includes("SEU-SNIPE") && API_KEY !== "SEU_TOKEN_API"
+const api = axios.create({
+  baseURL: SNIPE_URL,
+  timeout: 10000,
+  headers: {
+    Authorization: `Bearer ${API_KEY}`,
+    Accept: "application/json",
+    "Content-Type": "application/json"
+  }
+})
+
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`)
+  next()
+})
+
+const validateId = (id) => !isNaN(id)
 
 const customFieldValue = (asset, fieldName) => {
   const field = asset.custom_fields?.[fieldName]
 
-  if (!field) {
-    return null
-  }
+  if (!field) return null
 
-  if (typeof field.value === "string") {
-    return field.value
-  }
+  if (typeof field === "object") return field.value ?? null
 
-  return field.value ?? null
+  return field
 }
 
 const mapAsset = (asset) => ({
@@ -55,13 +65,15 @@ const mapAsset = (asset) => ({
   notes: asset.notes || "",
   pa: customFieldValue(asset, "PA") || asset.rtd_location?.name || null,
   customFields: Object.fromEntries(
-    Object.entries(asset.custom_fields || {}).map(([key, value]) => [key, value.value ?? null])
+    Object.entries(asset.custom_fields || {}).map(([key, value]) => [
+      key,
+      typeof value === "object" ? value.value ?? null : value
+    ])
   )
 })
 
 const fetchAssetById = async (id) => {
-  const response = await axios.get(`${SNIPE_URL}/hardware/${id}`, { headers })
-
+  const response = await api.get(`/hardware/${id}`)
   return response.data
 }
 
@@ -178,18 +190,23 @@ const buildAssetPayload = async (assetId, body) => {
 app.use((req, res, next) => {
   if (!hasValidConfig) {
     return res.status(500).json({
-      error: "Configure as variáveis SNIPE_URL e SNIPE_API_KEY no arquivo .env antes de usar a API"
+      error:
+        "Configure SNIPE_URL e SNIPE_API_KEY no arquivo .env"
     })
   }
 
-  return next()
+  next()
 })
 
 app.get("/asset/:id", async (req, res) => {
+  if (!validateId(req.params.id)) {
+    return res.status(400).json({ error: "ID inválido" })
+  }
+
   try {
     const asset = await fetchAssetById(req.params.id)
 
-    return res.json(mapAsset(asset))
+    res.json(mapAsset(asset))
   } catch (e) {
     return res.status(500).json({ error: extractSnipeError(e, "Erro ao buscar ativo") })
   }
@@ -199,14 +216,20 @@ app.get("/move-info", async (req, res) => {
   const { asset } = req.query
 
   if (!asset) {
-    return res.status(400).json({ error: "Informe o parâmetro asset" })
+    return res.status(400).json({
+      error: "Informe o parâmetro asset"
+    })
+  }
+
+  if (!validateId(asset)) {
+    return res.status(400).json({ error: "ID inválido" })
   }
 
   try {
     const data = await fetchAssetById(asset)
     const mapped = mapAsset(data)
 
-    return res.json({
+    res.json({
       id: mapped.id,
       name: mapped.name,
       currentPA: mapped.pa,
@@ -214,51 +237,114 @@ app.get("/move-info", async (req, res) => {
       status: mapped.status
     })
   } catch (e) {
-    return res.status(500).json({ error: extractSnipeError(e, "Erro ao buscar dados para movimentação") })
+    console.error(e.response?.data || e.message)
+
+    res.status(500).json({
+      error: "Erro ao buscar dados para movimentação"
+    })
   }
 })
 
 app.post("/move", async (req, res) => {
   const { asset, pa } = req.body
-  const parsedPa = parseIntegerField(pa)
 
   if (!asset || !pa) {
-    return res.status(400).json({ error: "Campos asset e pa são obrigatórios" })
-  }
-
-  if (parsedPa === undefined) {
-    return res.status(400).json({ error: "PA deve ser um ID numérico de localização RTD" })
+    return res.status(400).json({
+      error: "Campos asset e pa são obrigatórios"
+    })
   }
 
   try {
-    await axios.patch(
-      `${SNIPE_URL}/hardware/${asset}`,
-      {
-        rtd_location_id: parsedPa
-      },
-      { headers }
-    )
+    const response = await api.patch(`/hardware/${asset}`, {
+      rtd_location_id: pa
+    })
 
-    return res.json({ success: true })
+    console.log("PAYLOAD MOVE:", { asset, pa })
+    console.log("SNIPE RESPONSE:", response.data)
+
+    if (response.data.status === "error") {
+      return res.status(400).json(response.data)
+    }
+
+    res.json({
+      success: true,
+      apiResponse: response.data
+    })
   } catch (e) {
     return res.status(500).json({ error: extractSnipeError(e, "Erro ao mover ativo") })
   }
 })
 
 app.patch("/asset/:id", async (req, res) => {
-  let payload = {}
+  const id = req.params.id
 
-  try {
-    payload = await buildAssetPayload(req.params.id, req.body)
-  } catch (e) {
-    return res.status(500).json({ error: extractSnipeError(e, "Erro ao identificar o campo PA") })
+  if (!validateId(id)) {
+    return res.status(400).json({ error: "ID inválido" })
   }
 
   try {
-    await axios.patch(`${SNIPE_URL}/hardware/${req.params.id}`, payload, { headers })
-    const updatedAsset = await fetchAssetById(req.params.id)
+    const currentAsset = await fetchAssetById(id)
 
-    return res.json({ success: true, asset: mapAsset(updatedAsset) })
+    const allowedFields = [
+      "name",
+      "serial",
+      "notes",
+      "location_id",
+      "rtd_location_id",
+      "status_id",
+      "model_id",
+      "company_id"
+    ]
+
+    const payload = {}
+
+    for (const field of allowedFields) {
+
+      if (req.body[field] === undefined || req.body[field] === "") {
+        continue
+      }
+
+      if (field === "serial") {
+
+        if (req.body.serial === currentAsset.serial) {
+          continue
+        }
+
+      }
+
+      payload[field] = req.body[field]
+
+    }
+
+    if (req.body.pa && CUSTOM_FIELD_PA) {
+      payload._customfields = {
+        [CUSTOM_FIELD_PA]: req.body.pa
+      }
+    }
+
+    if (Object.keys(payload).length === 0) {
+      return res.status(400).json({
+        error: "Nenhum campo válido enviado"
+      })
+    }
+
+    console.log("PAYLOAD UPDATE:", payload)
+
+    const response = await api.patch(`/hardware/${id}`, payload)
+
+    console.log("SNIPE UPDATE RESPONSE:", response.data)
+
+    if (response.data.status === "error") {
+      return res.status(400).json(response.data)
+    }
+
+    const updatedAsset = await fetchAssetById(id)
+
+    res.json({
+      success: true,
+      apiResponse: response.data,
+      asset: mapAsset(updatedAsset)
+    })
   } catch (e) {
     return res.status(500).json({ error: extractSnipeError(e, "Erro ao atualizar ativo") })
   }
@@ -268,19 +354,26 @@ app.post("/checkout", async (req, res) => {
   const { asset, user } = req.body
 
   if (!asset || !user) {
-    return res.status(400).json({ error: "Campos asset e user são obrigatórios" })
+    return res.status(400).json({
+      error: "Campos asset e user são obrigatórios"
+    })
   }
 
   try {
-    await axios.post(
-      `${SNIPE_URL}/hardware/${asset}/checkout`,
-      {
-        assigned_user: user
-      },
-      { headers }
-    )
+    const response = await api.post(`/hardware/${asset}/checkout`, {
+      assigned_user: user
+    })
 
-    return res.json({ success: true })
+    console.log("CHECKOUT RESPONSE:", response.data)
+
+    if (response.data.status === "error") {
+      return res.status(400).json(response.data)
+    }
+
+    res.json({
+      success: true,
+      apiResponse: response.data
+    })
   } catch (e) {
     return res.status(500).json({ error: extractSnipeError(e, "Erro no checkout") })
   }
