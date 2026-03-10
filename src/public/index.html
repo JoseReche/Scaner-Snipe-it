@@ -2,311 +2,436 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Scanner de Ativos Snipe-IT</title>
+
 <script src="https://unpkg.com/html5-qrcode"></script>
+
 <style>
-body {
+
+body{
   font-family: Arial, sans-serif;
-  margin: 0;
-  background: #f3f6fb;
-  color: #0f172a;
+  margin:0;
+  background:#f3f6fb;
+  color:#0f172a;
 }
 
-.container {
-  max-width: 1000px;
-  margin: 0 auto;
-  padding: 24px;
+.container{
+  max-width:1000px;
+  margin:0 auto;
+  padding:16px;
 }
 
-h1 {
-  margin: 0 0 18px;
+h1{
+  margin:0 0 18px;
+  font-size:22px;
 }
 
-.grid {
-  display: grid;
-  grid-template-columns: 340px 1fr;
-  gap: 16px;
+.grid{
+  display:grid;
+  grid-template-columns:340px 1fr;
+  gap:16px;
 }
 
-.card {
-  background: #fff;
-  border-radius: 10px;
-  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.08);
-  padding: 16px;
+.card{
+  background:#fff;
+  border-radius:10px;
+  box-shadow:0 4px 16px rgba(15,23,42,0.08);
+  padding:16px;
 }
 
-#reader {
-  width: 100%;
+.small{
+  font-size:13px;
+  color:#475569;
 }
 
-.small {
-  font-size: 13px;
-  color: #475569;
+label{
+  display:block;
+  margin:10px 0 4px;
+  font-weight:600;
 }
 
-label {
-  display: block;
-  margin: 10px 0 4px;
-  font-weight: 600;
+input,textarea,select{
+  width:100%;
+  box-sizing:border-box;
+  padding:12px;
+  border:1px solid #cbd5e1;
+  border-radius:8px;
+  font-size:16px;
 }
 
-input, textarea, select {
-  width: 100%;
-  box-sizing: border-box;
-  padding: 10px;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
+textarea{
+  min-height:90px;
 }
 
-textarea {
-  min-height: 90px;
-  resize: vertical;
+button{
+  width:100%;
+  margin-top:14px;
+  background:#2563eb;
+  color:#fff;
+  border:0;
+  border-radius:8px;
+  padding:14px;
+  font-weight:700;
+  font-size:16px;
+  cursor:pointer;
 }
 
-button {
-  margin-top: 14px;
-  background: #2563eb;
-  color: #fff;
-  border: 0;
-  border-radius: 8px;
-  padding: 11px 14px;
-  cursor: pointer;
-  font-weight: 700;
+button:disabled{
+  background:#94a3b8;
 }
 
-button:disabled {
-  background: #94a3b8;
-  cursor: not-allowed;
+.scan-button{
+  background:#16a34a;
+  font-size:18px;
+  padding:18px;
 }
 
-.info-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+#reader{
+  width:100%;
+  border-radius:10px;
+  overflow:hidden;
 }
 
-.info-item {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 10px;
-  font-size: 14px;
+.info-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px;
 }
 
-code {
-  background: #e2e8f0;
-  border-radius: 4px;
-  padding: 1px 4px;
+.info-item{
+  background:#f8fafc;
+  border:1px solid #e2e8f0;
+  border-radius:8px;
+  padding:10px;
+  font-size:14px;
 }
 
-@media (max-width: 820px) {
-  .grid {
-    grid-template-columns: 1fr;
-  }
+code{
+  background:#e2e8f0;
+  border-radius:4px;
+  padding:1px 4px;
 }
+
+/* animação scan */
+
+.scan-success{
+  animation:scanFlash .6s ease;
+}
+
+@keyframes scanFlash{
+  0%{background:#16a34a}
+  100%{background:transparent}
+}
+
+/* mobile */
+
+@media(max-width:820px){
+
+.container{padding:12px}
+
+.grid{
+  grid-template-columns:1fr;
+}
+
+.info-grid{
+  grid-template-columns:1fr;
+}
+
+}
+
+/* modo escuro */
+
+@media (prefers-color-scheme: dark){
+
+body{
+  background:#0f172a;
+  color:#e2e8f0;
+}
+
+.card{
+  background:#1e293b;
+  box-shadow:none;
+}
+
+input,textarea,select{
+  background:#0f172a;
+  color:#e2e8f0;
+  border:1px solid #334155;
+}
+
+.info-item{
+  background:#0f172a;
+  border:1px solid #334155;
+}
+
+.small{
+  color:#94a3b8;
+}
+
+button{
+  background:#3b82f6;
+}
+
+.scan-button{
+  background:#22c55e;
+}
+
+}
+
 </style>
 </head>
+
 <body>
+
 <div class="container">
-  <h1>Scanner de Ativos</h1>
-  <div class="grid">
-    <section class="card">
-      <h3>Leitura do QR Code</h3>
-      <div id="reader"></div>
-      <p class="small">Você também pode digitar manualmente o ID do ativo.</p>
-      <label for="manualAsset">ID do ativo</label>
-      <input id="manualAsset" placeholder="Ex.: 2170">
-      <button onclick="loadAssetFromInput()">Buscar ativo</button>
-    </section>
 
-    <section class="card">
-      <h3>Dados atuais do equipamento</h3>
-      <div id="emptyState" class="small">Escaneie um ativo para visualizar e editar os dados.</div>
-      <div id="assetPanel" style="display:none">
-        <div class="info-grid">
-          <div class="info-item"><b>ID:</b> <span id="view-id">-</span></div>
-          <div class="info-item"><b>Tag:</b> <span id="view-tag">-</span></div>
-          <div class="info-item"><b>Nome:</b> <span id="view-name">-</span></div>
-          <div class="info-item"><b>Status:</b> <span id="view-status">-</span></div>
-          <div class="info-item"><b>Local:</b> <span id="view-location">-</span></div>
-          <div class="info-item"><b>RTD:</b> <span id="view-rtd">-</span></div>
-          <div class="info-item"><b>PA atual:</b> <span id="view-pa">-</span></div>
-          <div class="info-item"><b>MAC:</b> <span id="view-mac">-</span></div>
-        </div>
+<h1>Scanner de Ativos</h1>
 
-        <h3 style="margin-top:16px">Atualização rápida</h3>
-        <p class="small">Nome e serial são apenas para visualização. Campos permitidos no update: <code>status_id</code>, <code>location_id</code>, <code>rtd_location_id</code>, <code>notes</code> e <code>custom_fields.PA</code>.</p>
+<div class="grid">
 
-        <label for="editPA">PA (campo customizado)</label>
-        <input id="editPA" placeholder="Ex.: PA-123">
+<section class="card">
 
-        <label for="editStatus">Status</label>
-        <select id="editStatus"></select>
+<h3>Leitura do QR Code</h3>
 
-        <label for="editLocation">Local</label>
-        <select id="editLocation"></select>
+<button id="startScanBtn" class="scan-button" onclick="startScanner()">
+📷 ESCANEAR QR CODE
+</button>
 
-        <label for="editRTD">RTD Location (posição física)</label>
-        <select id="editRTD"></select>
+<div id="reader" style="display:none"></div>
 
-        <label for="editNotes">Notas</label>
-        <textarea id="editNotes" placeholder="Observações do ativo"></textarea>
+<p class="small">Você também pode digitar manualmente o ID do ativo.</p>
 
-        <button id="saveButton" onclick="saveAsset()">Salvar alterações</button>
-      </div>
-    </section>
-  </div>
+<label>ID do ativo</label>
+<input id="manualAsset" placeholder="Ex.: 2170">
+
+<button onclick="loadAssetFromInput()">Buscar ativo</button>
+
+</section>
+
+<section class="card">
+
+<h3>Dados atuais do equipamento</h3>
+
+<div id="emptyState" class="small">
+Escaneie um ativo para visualizar e editar os dados.
+</div>
+
+<div id="assetPanel" style="display:none">
+
+<div class="info-grid">
+<div class="info-item"><b>ID:</b> <span id="view-id">-</span></div>
+<div class="info-item"><b>Tag:</b> <span id="view-tag">-</span></div>
+<div class="info-item"><b>Nome:</b> <span id="view-name">-</span></div>
+<div class="info-item"><b>Status:</b> <span id="view-status">-</span></div>
+<div class="info-item"><b>Local:</b> <span id="view-location">-</span></div>
+<div class="info-item"><b>RTD:</b> <span id="view-rtd">-</span></div>
+<div class="info-item"><b>PA:</b> <span id="view-pa">-</span></div>
+<div class="info-item"><b>MAC:</b> <span id="view-mac">-</span></div>
+</div>
+
+<h3 style="margin-top:16px">Atualização rápida</h3>
+
+<label>PA</label>
+<input id="editPA">
+
+<label>Status</label>
+<select id="editStatus"></select>
+
+<label>Local</label>
+<select id="editLocation"></select>
+
+<label>RTD Location</label>
+<select id="editRTD"></select>
+
+<label>Notas</label>
+<textarea id="editNotes"></textarea>
+
+<button id="saveButton" onclick="saveAsset()">Salvar alterações</button>
+
+</div>
+
+</section>
+
+</div>
 </div>
 
 <script>
-let currentAssetId = null
-let statusOptions = []
-let locationOptions = []
 
-const byId = (id) => document.getElementById(id)
+let currentAssetId=null
+let statusOptions=[]
+let locationOptions=[]
+let scanner=null
+let scanning=false
+let lastScan=null
 
-function fillSelect(selectId, options, selectedValue, placeholder) {
-  const select = byId(selectId)
-  const normalizedSelected = selectedValue === null || selectedValue === undefined ? "" : String(selectedValue)
+const byId=(id)=>document.getElementById(id)
 
-  select.innerHTML = ""
+function fillSelect(selectId,options,selectedValue,placeholder){
 
-  const emptyOption = document.createElement("option")
-  emptyOption.value = ""
-  emptyOption.textContent = placeholder
-  select.appendChild(emptyOption)
+const select=byId(selectId)
+select.innerHTML=""
 
-  options.forEach((option) => {
-    const el = document.createElement("option")
-    el.value = option.id
-    el.textContent = `${option.id} - ${option.name}`
-    select.appendChild(el)
-  })
+const empty=document.createElement("option")
+empty.value=""
+empty.textContent=placeholder
+select.appendChild(empty)
 
-  if (normalizedSelected && options.some((option) => String(option.id) === normalizedSelected)) {
-    select.value = normalizedSelected
-  } else {
-    select.value = ""
-  }
+options.forEach(opt=>{
+const el=document.createElement("option")
+el.value=opt.id
+el.textContent=opt.id+" - "+opt.name
+select.appendChild(el)
+})
+
+if(selectedValue) select.value=selectedValue
+
 }
 
-async function loadOptions() {
-  const response = await fetch("/options")
-  const data = await response.json()
+async function loadOptions(){
 
-  if (!response.ok || data.error) {
-    throw new Error(data.error || "Erro ao carregar listas de status e local")
-  }
+const res=await fetch("/options")
+const data=await res.json()
 
-  statusOptions = data.statuses || []
-  locationOptions = data.locations || []
+statusOptions=data.statuses||[]
+locationOptions=data.locations||[]
 
-  fillSelect("editStatus", statusOptions, null, "Selecione um status")
-  fillSelect("editLocation", locationOptions, null, "Selecione um local")
-  fillSelect("editRTD", locationOptions, null, "Selecione um RTD")
+fillSelect("editStatus",statusOptions,null,"Selecione")
+fillSelect("editLocation",locationOptions,null,"Selecione")
+fillSelect("editRTD",locationOptions,null,"Selecione")
+
 }
 
-function parseAssetId(raw) {
-  if (!raw) return null
-  if (raw.includes("hardware/")) {
-    return raw.split("hardware/")[1].trim()
-  }
-  return raw.trim()
+function parseAssetId(raw){
+
+if(!raw) return null
+
+if(raw.includes("hardware/")){
+return raw.split("hardware/")[1].trim()
 }
 
-function fillPanel(asset) {
-  byId("emptyState").style.display = "none"
-  byId("assetPanel").style.display = "block"
+return raw.trim()
 
-  byId("view-id").textContent = asset.id ?? "-"
-  byId("view-tag").textContent = asset.assetTag ?? "-"
-  byId("view-name").textContent = asset.name ?? "-"
-  byId("view-status").textContent = asset.status ?? "-"
-  byId("view-location").textContent = asset.location ?? "-"
-  byId("view-rtd").textContent = asset.rtdLocation ?? "-"
-  byId("view-pa").textContent = asset.pa ?? "-"
-  byId("view-mac").textContent = asset.customFields?.["MAC Address"] ?? "-"
-
-  byId("editPA").value = asset.customFields?.PA ?? ""
-  fillSelect("editStatus", statusOptions, asset.statusId, "Selecione um status")
-  fillSelect("editLocation", locationOptions, asset.locationId, "Selecione um local")
-  fillSelect("editRTD", locationOptions, asset.rtdLocationId, "Selecione um RTD")
-  byId("editNotes").value = asset.notes ?? ""
 }
 
-async function loadAsset(assetId) {
-  if (!assetId) {
-    alert("Informe um ID de ativo válido")
-    return
-  }
+function fillPanel(asset){
 
-  const response = await fetch(`/asset/${encodeURIComponent(assetId)}`)
-  const data = await response.json()
+byId("emptyState").style.display="none"
+byId("assetPanel").style.display="block"
 
-  if (!response.ok || data.error) {
-    throw new Error(data.error || "Erro ao buscar ativo")
-  }
+byId("view-id").textContent=asset.id||"-"
+byId("view-tag").textContent=asset.assetTag||"-"
+byId("view-name").textContent=asset.name||"-"
+byId("view-status").textContent=asset.status||"-"
+byId("view-location").textContent=asset.location||"-"
+byId("view-rtd").textContent=asset.rtdLocation||"-"
+byId("view-pa").textContent=asset.pa||"-"
+byId("view-mac").textContent=asset.customFields?.["MAC Address"]||"-"
 
-  currentAssetId = data.id
-  byId("manualAsset").value = data.id
-  fillPanel(data)
+byId("editPA").value=asset.customFields?.PA||""
+byId("editNotes").value=asset.notes||""
+
+fillSelect("editStatus",statusOptions,asset.statusId,"Selecione")
+fillSelect("editLocation",locationOptions,asset.locationId,"Selecione")
+fillSelect("editRTD",locationOptions,asset.rtdLocationId,"Selecione")
+
 }
 
-function loadAssetFromInput() {
-  const id = parseAssetId(byId("manualAsset").value)
-  loadAsset(id).catch((e) => alert(e.message))
+async function loadAsset(assetId){
+
+const res=await fetch("/asset/"+assetId)
+const data=await res.json()
+
+currentAssetId=data.id
+byId("manualAsset").value=data.id
+
+fillPanel(data)
+
 }
 
-function onScanSuccess(decodedText) {
-  const id = parseAssetId(decodedText)
-  loadAsset(id).catch((e) => alert(e.message))
+function loadAssetFromInput(){
+
+const id=parseAssetId(byId("manualAsset").value)
+loadAsset(id)
+
 }
 
-async function saveAsset() {
-  if (!currentAssetId) {
-    alert("Escaneie ou busque um ativo antes de salvar")
-    return
-  }
+function onScanSuccess(decodedText){
 
-  const payload = {
-    pa: byId("editPA").value,
-    status_id: byId("editStatus").value,
-    location_id: byId("editLocation").value,
-    rtd_location_id: byId("editRTD").value,
-    notes: byId("editNotes").value
-  }
+const id=parseAssetId(decodedText)
 
-  const saveButton = byId("saveButton")
-  saveButton.disabled = true
-  saveButton.textContent = "Salvando..."
+if(id===lastScan) return
+lastScan=id
 
-  try {
-    const response = await fetch(`/asset/${currentAssetId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload)
-    })
-
-    const data = await response.json()
-
-    if (!response.ok || data.error) {
-      throw new Error(data.error || "Erro ao salvar")
-    }
-
-    fillPanel(data.asset)
-    alert("Ativo atualizado com sucesso")
-  } catch (e) {
-    alert(e.message)
-  } finally {
-    saveButton.disabled = false
-    saveButton.textContent = "Salvar alterações"
-  }
+if(navigator.vibrate){
+navigator.vibrate(120)
 }
 
-loadOptions().catch((e) => alert(e.message))
+document.body.classList.add("scan-success")
 
-const scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 })
+setTimeout(()=>{
+document.body.classList.remove("scan-success")
+},500)
+
+loadAsset(id)
+
+}
+
+function startScanner(){
+
+if(scanning) return
+
+byId("reader").style.display="block"
+
+scanner=new Html5QrcodeScanner(
+"reader",
+{
+fps:10,
+qrbox:{width:220,height:220}
+})
+
 scanner.render(onScanSuccess)
+
+scanning=true
+
+}
+
+async function saveAsset(){
+
+if(!currentAssetId) return
+
+const payload={
+pa:byId("editPA").value,
+status_id:byId("editStatus").value,
+location_id:byId("editLocation").value,
+rtd_location_id:byId("editRTD").value,
+notes:byId("editNotes").value
+}
+
+const btn=byId("saveButton")
+btn.disabled=true
+btn.textContent="Salvando..."
+
+const res=await fetch("/asset/"+currentAssetId,{
+method:"PATCH",
+headers:{"Content-Type":"application/json"},
+body:JSON.stringify(payload)
+})
+
+const data=await res.json()
+
+fillPanel(data.asset)
+
+btn.disabled=false
+btn.textContent="Salvar alterações"
+
+alert("Ativo atualizado")
+
+}
+
+loadOptions()
+
 </script>
+
 </body>
 </html>
