@@ -23,6 +23,7 @@ cp .env.example .env
 ```bash
 cd src
 npm install
+npm run check
 npm start
 ```
 
@@ -31,3 +32,15 @@ Depois acesse:
 - `http://localhost:3000/index.html` (scanner/movimentação)
 - `http://localhost:3000/ativo.html?id=123` (detalhes do ativo)
 - `http://localhost:3000/homeoffice.html` (checkout de kit)
+
+
+## Solução de erro de sintaxe
+
+Se aparecer erro como `SyntaxError: Unexpected token`) ao iniciar, execute:
+
+```bash
+cd src
+npm run check
+```
+
+Isso valida o `server.js` antes de subir o servidor e ajuda a identificar rapidamente arquivo quebrado por conflito de merge.
