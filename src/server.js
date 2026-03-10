@@ -65,6 +65,30 @@ const fetchAssetById = async (id) => {
   return response.data
 }
 
+const fetchPaginatedRows = async (endpoint) => {
+  const rows = []
+  let offset = 0
+  const limit = 500
+
+  while (true) {
+    const response = await axios.get(`${SNIPE_URL}/${endpoint}`, {
+      headers,
+      params: { limit, offset }
+    })
+    const pageRows = Array.isArray(response.data?.rows) ? response.data.rows : []
+
+    rows.push(...pageRows)
+
+    if (pageRows.length < limit) {
+      break
+    }
+
+    offset += limit
+  }
+
+  return rows
+}
+
 const parseIntegerField = (value) => {
   if (value === undefined || value === null || value === "") {
     return undefined
@@ -151,6 +175,10 @@ const buildAssetPayload = async (assetId, body) => {
     payload.custom_fields = customFields
   }
 
+  if (Object.keys(payload).length === 0) {
+    throw new Error("Nenhum campo válido para atualizar foi enviado")
+  }
+
   return payload
 }
 
@@ -198,6 +226,23 @@ app.get("/move-info", async (req, res) => {
   }
 })
 
+app.get("/options", async (_req, res) => {
+  try {
+    const [statusRows, locationRows] = await Promise.all([
+      fetchPaginatedRows("statuslabels"),
+      fetchPaginatedRows("locations")
+    ])
+
+    const statuses = statusRows.map((item) => ({ id: item.id, name: item.name })).filter((item) => item.id && item.name)
+    const locations = locationRows.map((item) => ({ id: item.id, name: item.name })).filter((item) => item.id && item.name)
+
+    return res.json({ statuses, locations })
+  } catch (e) {
+    return res.status(500).json({ error: extractSnipeError(e, "Erro ao buscar listas de status e local") })
+  }
+})
+
+
 app.post("/move", async (req, res) => {
   const { asset, pa } = req.body
   const parsedPa = parseIntegerField(pa)
@@ -232,38 +277,11 @@ app.patch("/asset/:id", async (req, res) => {
   try {
     payload = await buildAssetPayload(req.params.id, req.body)
   } catch (e) {
-    return res.status(500).json({ error: extractSnipeError(e, "Erro ao identificar o campo PA") })
-  const allowedFields = [
-    "name",
-    "serial",
-    "notes",
-    "location_id",
-    "rtd_location_id",
-    "status_id",
-    "model_id",
-    "company_id"
-  ]
-
-  const payload = {}
-
-  for (const field of allowedFields) {
-    if (req.body[field] !== undefined && req.body[field] !== "") {
-      payload[field] = req.body[field]
+    if (e.message === "Nenhum campo válido para atualizar foi enviado") {
+      return res.status(400).json({ error: e.message })
     }
-  }
 
-  const customFields = { ...(req.body.custom_fields || {}) }
-
-  if (req.body.pa !== undefined && req.body.pa !== "") {
-    customFields.PA = req.body.pa
-  }
-
-  if (Object.keys(customFields).length > 0) {
-    payload.custom_fields = customFields
-  }
-
-  if (Object.keys(payload).length === 0) {
-    return res.status(400).json({ error: "Nenhum campo válido para atualizar foi enviado" })
+    return res.status(500).json({ error: extractSnipeError(e, "Erro ao identificar o campo PA") })
   }
 
   try {
