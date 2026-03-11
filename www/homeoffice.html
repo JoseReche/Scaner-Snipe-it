@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>Kit Home Office</title>
+
+<style>
+
+body{
+font-family:Arial;
+background:#f4f6f8;
+padding:20px;
+}
+
+.card{
+
+background:white;
+padding:20px;
+border-radius:10px;
+max-width:400px;
+margin:auto;
+
+}
+
+input{
+width:100%;
+padding:10px;
+margin-bottom:10px;
+}
+
+button{
+
+width:100%;
+padding:12px;
+background:#16a34a;
+color:white;
+border:none;
+border-radius:8px;
+
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="card">
+
+<h2>Entrega Kit Home Office</h2>
+
+<input id="usuario" placeholder="ID do usuário">
+
+<input id="mouse" placeholder="ID Mouse">
+
+<input id="teclado" placeholder="ID Teclado">
+
+<input id="headset" placeholder="ID Headset">
+
+<button onclick="entregar()">Entregar Kit</button>
+
+</div>
+
+<script src="cordova.js"></script>
+<script src="js/config.js"></script>
+<script src="js/api-client.js"></script>
+<script src="js/offline-queue.js"></script>
+<script src="js/homeoffice.js"></script>
+
+</body>
+</html>

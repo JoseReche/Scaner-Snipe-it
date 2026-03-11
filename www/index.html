@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scanner de Ativos Snipe-IT</title>
+
+
+<style>
+
+body{
+  font-family: Arial, sans-serif;
+  margin:0;
+  background:#f3f6fb;
+  color:#0f172a;
+}
+
+.container{
+  max-width:1000px;
+  margin:0 auto;
+  padding:16px;
+}
+
+h1{
+  margin:0 0 18px;
+  font-size:22px;
+}
+
+.grid{
+  display:grid;
+  grid-template-columns:340px 1fr;
+  gap:16px;
+}
+
+.card{
+  background:#fff;
+  border-radius:10px;
+  box-shadow:0 4px 16px rgba(15,23,42,0.08);
+  padding:16px;
+}
+
+.small{
+  font-size:13px;
+  color:#475569;
+}
+
+label{
+  display:block;
+  margin:10px 0 4px;
+  font-weight:600;
+}
+
+input,textarea,select{
+  width:100%;
+  box-sizing:border-box;
+  padding:12px;
+  border:1px solid #cbd5e1;
+  border-radius:8px;
+  font-size:16px;
+}
+
+textarea{
+  min-height:90px;
+}
+
+button{
+  width:100%;
+  margin-top:14px;
+  background:#2563eb;
+  color:#fff;
+  border:0;
+  border-radius:8px;
+  padding:14px;
+  font-weight:700;
+  font-size:16px;
+  cursor:pointer;
+}
+
+button:disabled{
+  background:#94a3b8;
+}
+
+.scan-button{
+  background:#16a34a;
+  font-size:18px;
+  padding:18px;
+}
+
+#reader{
+  width:100%;
+  border-radius:10px;
+  overflow:hidden;
+}
+
+.info-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px;
+}
+
+.info-item{
+  background:#f8fafc;
+  border:1px solid #e2e8f0;
+  border-radius:8px;
+  padding:10px;
+  font-size:14px;
+}
+
+code{
+  background:#e2e8f0;
+  border-radius:4px;
+  padding:1px 4px;
+}
+
+/* animação scan */
+
+.scan-success{
+  animation:scanFlash .6s ease;
+}
+
+@keyframes scanFlash{
+  0%{background:#16a34a}
+  100%{background:transparent}
+}
+
+/* mobile */
+
+@media(max-width:820px){
+
+.container{padding:12px}
+
+.grid{
+  grid-template-columns:1fr;
+}
+
+.info-grid{
+  grid-template-columns:1fr;
+}
+
+}
+
+/* modo escuro */
+
+@media (prefers-color-scheme: dark){
+
+body{
+  background:#0f172a;
+  color:#e2e8f0;
+}
+
+.card{
+  background:#1e293b;
+  box-shadow:none;
+}
+
+input,textarea,select{
+  background:#0f172a;
+  color:#e2e8f0;
+  border:1px solid #334155;
+}
+
+.info-item{
+  background:#0f172a;
+  border:1px solid #334155;
+}
+
+.small{
+  color:#94a3b8;
+}
+
+button{
+  background:#3b82f6;
+}
+
+.scan-button{
+  background:#22c55e;
+}
+
+}
+
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>Scanner de Ativos</h1>
+
+<div class="grid">
+
+<section class="card">
+
+<h3>Leitura do QR Code</h3>
+
+<button id="startScanBtn" class="scan-button" onclick="startScanner()">
+📷 ESCANEAR QR CODE
+</button>
+
+<div id="reader" style="display:none"></div>
+
+<p class="small">Você também pode digitar manualmente o ID do ativo.</p>
+
+<label>ID do ativo</label>
+<input id="manualAsset" placeholder="Ex.: 2170">
+
+<button onclick="loadAssetFromInput()">Buscar ativo</button>
+
+</section>
+
+<section class="card">
+
+<h3>Dados atuais do equipamento</h3>
+
+<div id="emptyState" class="small">
+Escaneie um ativo para visualizar e editar os dados.
+</div>
+
+<div id="assetPanel" style="display:none">
+
+<div class="info-grid">
+<div class="info-item"><b>ID:</b> <span id="view-id">-</span></div>
+<div class="info-item"><b>Tag:</b> <span id="view-tag">-</span></div>
+<div class="info-item"><b>Nome:</b> <span id="view-name">-</span></div>
+<div class="info-item"><b>Status:</b> <span id="view-status">-</span></div>
+<div class="info-item"><b>Local:</b> <span id="view-location">-</span></div>
+<div class="info-item"><b>RTD:</b> <span id="view-rtd">-</span></div>
+<div class="info-item"><b>PA:</b> <span id="view-pa">-</span></div>
+<div class="info-item"><b>MAC:</b> <span id="view-mac">-</span></div>
+</div>
+
+<h3 style="margin-top:16px">Atualização rápida</h3>
+
+<label>PA</label>
+<input id="editPA" type="number" inputmode="numeric">
+
+<label>Status</label>
+<select id="editStatus"></select>
+
+<label>Local</label>
+<select id="editLocation"></select>
+
+<label>Local Padrão</label>
+<select id="editRTD"></select>
+
+<label>Notas</label>
+<textarea id="editNotes"></textarea>
+
+<button id="saveButton" onclick="saveAsset()">Salvar alterações</button>
+
+</div>
+
+</section>
+
+</div>
+</div>
+
+<script src="cordova.js"></script>
+<script src="https://unpkg.com/html5-qrcode"></script>
+<script src="js/config.js"></script>
+<script src="js/api-client.js"></script>
+<script src="js/offline-queue.js"></script>
+<script src="js/index.js"></script>
+
+</body>
+</html>

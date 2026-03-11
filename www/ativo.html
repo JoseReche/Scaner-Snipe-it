@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Detalhes do Ativo</title>
+
+<style>
+
+body{
+font-family:Arial;
+background:#f4f6f8;
+padding:20px;
+}
+
+.card{
+
+background:white;
+padding:20px;
+border-radius:10px;
+max-width:400px;
+margin:auto;
+
+}
+
+.item{
+margin-bottom:10px;
+}
+
+button{
+
+width:100%;
+padding:12px;
+background:#2563eb;
+color:white;
+border:none;
+border-radius:8px;
+
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="card">
+
+<h2>Ativo</h2>
+
+<div class="item" id="empresa"></div>
+<div class="item" id="marca"></div>
+<div class="item" id="status"></div>
+<div class="item" id="local"></div>
+<div class="item" id="pa"></div>
+
+<input id="novaPA" placeholder="Nova PA">
+
+<button onclick="mover()">Atualizar PA</button>
+
+</div>
+
+<script src="cordova.js"></script>
+<script src="js/config.js"></script>
+<script src="js/api-client.js"></script>
+<script src="js/offline-queue.js"></script>
+<script src="js/ativo.js"></script>
+
+</body>
+</html>
