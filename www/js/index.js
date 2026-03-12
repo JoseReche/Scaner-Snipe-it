@@ -4,8 +4,17 @@ let locationOptions = []
 let scanner = null
 let scanning = false
 let lastScan = null
+let scanLock = false
 
 const byId = (id) => document.getElementById(id)
+
+function setScanStatus(message, isError = false) {
+  const statusEl = byId("scanStatus")
+  if (!statusEl) return
+
+  statusEl.textContent = message
+  statusEl.style.color = isError ? "#dc2626" : ""
+}
 
 function fillSelect(selectId, options, selectedValue, placeholder) {
   const select = byId(selectId)
@@ -78,9 +87,11 @@ function loadAssetFromInput() {
   loadAsset(id).catch((error) => alert(error.message))
 }
 
-function onScanSuccess(decodedText) {
+async function onScanSuccess(decodedText) {
   const id = parseAssetId(decodedText)
-  if (id === lastScan) return
+  if (!id || id === lastScan || scanLock) return
+
+  scanLock = true
   lastScan = id
 
   if (navigator.vibrate) navigator.vibrate(120)
@@ -88,16 +99,49 @@ function onScanSuccess(decodedText) {
   document.body.classList.add("scan-success")
   setTimeout(() => document.body.classList.remove("scan-success"), 500)
 
-  loadAsset(id).catch((error) => alert(error.message))
+  try {
+    await loadAsset(id)
+    setScanStatus(`Leitura OK: ativo ${id}`)
+  } catch (error) {
+    setScanStatus(`Falha ao carregar ativo ${id}`, true)
+    alert(error.message)
+  } finally {
+    setTimeout(() => {
+      scanLock = false
+    }, 700)
+  }
+}
+
+function getScannerConfig() {
+  const smallScreen = window.matchMedia("(max-width: 820px)").matches
+
+  return {
+    fps: smallScreen ? 6 : 10,
+    qrbox: smallScreen ? { width: 190, height: 190 } : { width: 220, height: 220 },
+    aspectRatio: smallScreen ? 1.333334 : undefined,
+    rememberLastUsedCamera: true,
+    ...(typeof Html5QrcodeScanType !== "undefined"
+      ? { supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA] }
+      : {})
+  }
 }
 
 function startScanner() {
   if (scanning) return
-  byId("reader").style.display = "block"
 
-  scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: { width: 220, height: 220 } })
-  scanner.render(onScanSuccess)
+  byId("reader").style.display = "block"
+  setScanStatus("Solicitando acesso à câmera...")
+
+  scanner = new Html5QrcodeScanner("reader", getScannerConfig(), false)
+  scanner.render(
+    onScanSuccess,
+    () => {
+      // Ignora erros de frame para reduzir custo de render/log no mobile.
+    }
+  )
+
   scanning = true
+  setScanStatus("Câmera iniciada. Aponte para o QR Code.")
 }
 
 async function saveAsset() {
@@ -141,6 +185,7 @@ window.loadAssetFromInput = loadAssetFromInput
 window.saveAsset = saveAsset
 
 document.addEventListener("DOMContentLoaded", () => {
+  setScanStatus("Toque em ESCANEAR QR CODE para abrir a câmera.")
   loadOptions().catch((error) => alert(error.message))
   window.OfflineSync.sincronizarDados()
 })

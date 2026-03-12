@@ -199,6 +199,7 @@ button{
 </button>
 
 <div id="reader" style="display:none"></div>
+<p id="scanStatus" class="small"></p>
 
 <p class="small">Você também pode digitar manualmente o ID do ativo.</p>
 
@@ -264,6 +265,7 @@ let locationOptions=[]
 let scanner=null
 let scanning=false
 let lastScan=null
+let scanLock=false
 
 const byId=(id)=>document.getElementById(id)
 
@@ -352,15 +354,27 @@ fillPanel(data)
 function loadAssetFromInput(){
 
 const id=parseAssetId(byId("manualAsset").value)
+if(!id) return
 loadAsset(id)
 
 }
 
-function onScanSuccess(decodedText){
+function setScanStatus(message,isError=false){
+
+const statusEl=byId("scanStatus")
+if(!statusEl) return
+
+statusEl.textContent=message
+statusEl.style.color=isError?"#dc2626":""
+
+}
+
+async function onScanSuccess(decodedText){
 
 const id=parseAssetId(decodedText)
 
-if(id===lastScan) return
+if(!id||id===lastScan||scanLock) return
+scanLock=true
 lastScan=id
 
 if(navigator.vibrate){
@@ -373,7 +387,33 @@ setTimeout(()=>{
 document.body.classList.remove("scan-success")
 },500)
 
-loadAsset(id)
+try{
+await loadAsset(id)
+setScanStatus(`Leitura OK: ativo ${id}`)
+}catch(error){
+setScanStatus(`Falha ao carregar ativo ${id}`,true)
+alert(error.message)
+}finally{
+setTimeout(()=>{
+scanLock=false
+},700)
+}
+
+}
+
+function getScannerConfig(){
+
+const smallScreen=window.matchMedia("(max-width:820px)").matches
+
+return{
+fps:smallScreen?6:10,
+qrbox:smallScreen?{width:190,height:190}:{width:220,height:220},
+aspectRatio:smallScreen?1.333334:undefined,
+rememberLastUsedCamera:true,
+...(typeof Html5QrcodeScanType!=="undefined"
+?{supportedScanTypes:[Html5QrcodeScanType.SCAN_TYPE_CAMERA]}
+:{})
+}
 
 }
 
@@ -382,17 +422,16 @@ function startScanner(){
 if(scanning) return
 
 byId("reader").style.display="block"
+setScanStatus("Solicitando acesso à câmera...")
 
-scanner=new Html5QrcodeScanner(
-"reader",
-{
-fps:10,
-qrbox:{width:220,height:220}
+scanner=new Html5QrcodeScanner("reader",getScannerConfig(),false)
+
+scanner.render(onScanSuccess,()=>{
+// Ignora erros de frame para reduzir custo no mobile.
 })
 
-scanner.render(onScanSuccess)
-
 scanning=true
+setScanStatus("Câmera iniciada. Aponte para o QR Code.")
 
 }
 
@@ -429,6 +468,7 @@ alert("Ativo atualizado")
 
 }
 
+setScanStatus("Toque em ESCANEAR QR CODE para abrir a câmera.")
 loadOptions()
 
 </script>
