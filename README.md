@@ -1,61 +1,82 @@
-# Scaner-Snipe-it (Cordova)
+# Snipe-IT Auth Gateway (Codespaces)
 
-Aplicação web adaptada para rodar como app Android com **Apache Cordova**, incluindo suporte a operação **offline com buffer local** e sincronização automática.
+Sistema de autenticação seguro com arquitetura:
+
+**Frontend → Backend → Snipe-IT API**
+
+O frontend **nunca** chama a API do Snipe-IT diretamente.
 
 ## Estrutura
 
-O frontend para Cordova está em `www/`:
-
-- `www/index.html`
-- `www/ativo.html`
-- `www/homeoffice.html`
-- `www/js/config.js`
-- `www/js/api-client.js`
-- `www/js/offline-queue.js`
-
-> O arquivo `server.js` permanece no repositório apenas como legado de desenvolvimento web anterior. No fluxo Cordova, o app consome diretamente a API remota.
-
-## Configuração da API
-
-Edite `www/js/config.js`:
-
-- `API_BASE_URL`: URL da API do Snipe-IT (ex.: `https://meu-snipe-it/api/v1`)
-- `API_TOKEN`: token Bearer da API
-- `PA_FIELD_KEY`: chave do campo customizado de PA
-
-## Comportamento offline
-
-O app implementa:
-
-- `salvarOffline(dados)`: salva requisições em fila no `localStorage`.
-- `sincronizarDados()`: envia fila pendente quando a internet retorna.
-- `enviarParaAPI(dados)`: executa cada item da fila contra a API.
-
-Regras:
-
-- **Com internet**: envia direto para API.
-- **Sem internet**: salva localmente.
-- **Quando voltar internet**: sincroniza automaticamente no evento `online` e ao retomar app.
-
-## Build com Cordova (Android)
-
-```bash
-npm install -g cordova
-cordova create scanner-snipeit br.com.exemplo.scanner "Scanner Snipe-IT"
-cd scanner-snipeit
-cordova platform add android
+```text
+/project
+  /backend
+    server.js
+    routes.js
+    middleware.js
+  /frontend
+    login.html
+    dashboard.html
+    style.css
+    app.js
+  .env
+  package.json
 ```
 
-Copie o conteúdo desta pasta `www/` para a pasta `www/` do projeto Cordova.
+No repositório atual, a pasta `/project` corresponde à raiz deste projeto.
 
-Opcional para status de rede mais confiável:
+## Variáveis de ambiente
 
-```bash
-cordova plugin add cordova-plugin-network-information
+Crie um arquivo `.env` na raiz:
+
+```env
+SNIPEIT_URL=https://your-snipeit-instance.com
+SNIPEIT_API_KEY=YOUR_ADMIN_API_TOKEN
+JWT_SECRET=supersecretkey
+PORT=3000
+LOGIN_PASSWORD_HASH=$2b$10$REPLACE_WITH_BCRYPT_HASH
 ```
 
-Depois compile:
+> `LOGIN_PASSWORD_HASH` é usado para validar a senha enviada no `/login` via `bcrypt.compare`.
+
+Gerar hash bcrypt:
 
 ```bash
-cordova build android
+node -e "require('bcrypt').hash('sua_senha_forte', 10).then(console.log)"
 ```
+
+## Funcionalidades implementadas
+
+- `POST /login`
+  - recebe `email` e `password`
+  - consulta `GET /api/v1/users?search=email` no Snipe-IT
+  - valida existência do usuário + valida senha com bcrypt
+  - gera JWT e retorna token + dados básicos do usuário
+
+- Middleware JWT (`backend/middleware.js`)
+  - valida token Bearer para rotas protegidas
+
+- `GET /assets` (rota protegida)
+  - consulta `GET /api/v1/hardware` usando `SNIPEIT_API_KEY`
+  - retorna total e lista simples de ativos
+
+- Frontend simples e responsivo
+  - `login.html`: formulário de login e mensagens de erro
+  - `dashboard.html`: total de ativos e listagem
+  - token salvo no `localStorage`
+
+## Executar no GitHub Codespaces
+
+```bash
+npm install
+npm start
+```
+
+O servidor sobe por padrão na porta **3000**.
+
+## Segurança
+
+- `SNIPEIT_API_KEY` fica **somente** no backend.
+- Toda chamada ao Snipe-IT ocorre no backend.
+- Rotas protegidas exigem JWT válido.
+- Respostas de erro tratadas sem vazar segredos.
