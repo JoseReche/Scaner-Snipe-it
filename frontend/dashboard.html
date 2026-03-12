@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard | Snipe-IT Gateway</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <main class="page">
+    <header class="header card">
+      <div>
+        <h1>Dashboard</h1>
+        <p class="subtitle" id="welcomeUser"></p>
+      </div>
+      <button id="logoutBtn" class="secondary">Sair</button>
+    </header>
+
+    <section class="card">
+      <h2>Total de ativos: <span id="totalAssets">0</span></h2>
+      <ul id="assetList" class="asset-list"></ul>
+      <p id="dashboardError" class="error"></p>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

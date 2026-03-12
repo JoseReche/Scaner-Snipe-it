@@ -40,15 +40,29 @@
   async function request(path, options = {}) {
     validateConfig()
 
-    const response = await fetch(`${config.API_BASE_URL}${path}`, {
-      ...options,
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${config.API_TOKEN}`,
-        ...(options.headers || {})
+    let response
+
+    try {
+      response = await fetch(`${config.API_BASE_URL}${path}`, {
+        ...options,
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${config.API_TOKEN}`,
+          ...(options.headers || {})
+        }
+      })
+    } catch (error) {
+      const isOffline = typeof navigator !== "undefined" && navigator.onLine === false
+
+      if (isOffline) {
+        throw new Error("Sem conexão com a internet")
       }
-    })
+
+      throw new Error(
+        "Falha de conexão com a API. Verifique URL/TLS da API no config.js e libere o domínio no app Android (cleartext/Network Security Config)."
+      )
+    }
 
     const body = await response.json().catch(() => ({}))
 

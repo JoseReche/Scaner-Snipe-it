@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login | Snipe-IT Gateway</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <main class="page center">
+    <section class="card auth-card">
+      <h1>Entrar</h1>
+      <p class="subtitle">Autentique-se para acessar os ativos.</p>
+
+      <form id="loginForm" class="stack">
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" required autocomplete="email" />
+
+        <label for="password">Senha</label>
+        <input id="password" name="password" type="password" required autocomplete="current-password" />
+
+        <button id="loginBtn" type="submit">Login</button>
+      </form>
+
+      <p id="errorMessage" class="error" role="alert"></p>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

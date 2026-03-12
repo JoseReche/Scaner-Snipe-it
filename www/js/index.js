@@ -132,16 +132,41 @@ function startScanner() {
   byId("reader").style.display = "block"
   setScanStatus("Solicitando acesso à câmera...")
 
-  scanner = new Html5QrcodeScanner("reader", getScannerConfig(), false)
-  scanner.render(
-    onScanSuccess,
-    () => {
-      // Ignora erros de frame para reduzir custo de render/log no mobile.
-    }
-  )
+  if (typeof Html5Qrcode === "undefined") {
+    setScanStatus("Leitor de QR Code não carregado", true)
+    alert("Não foi possível iniciar o leitor de QR Code.")
+    return
+  }
 
-  scanning = true
-  setScanStatus("Câmera iniciada. Aponte para o QR Code.")
+  scanner = new Html5Qrcode("reader")
+
+  const config = getScannerConfig()
+  const cameraPreference = { facingMode: "environment" }
+
+  scanner
+    .start(cameraPreference, config, onScanSuccess)
+    .then(() => {
+      scanning = true
+      setScanStatus("Câmera iniciada. Aponte para o QR Code.")
+    })
+    .catch((error) => {
+      const message = String(error?.message || error || "")
+
+      if (message.includes("NotReadableError")) {
+        setScanStatus(
+          "A câmera está ocupada por outro app. Feche o app da câmera/WhatsApp e tente novamente.",
+          true
+        )
+        return
+      }
+
+      if (message.includes("NotAllowedError") || message.includes("Permission")) {
+        setScanStatus("Permissão da câmera negada. Autorize o app nas configurações.", true)
+        return
+      }
+
+      setScanStatus(`Falha ao iniciar câmera: ${message}`, true)
+    })
 }
 
 async function saveAsset() {
