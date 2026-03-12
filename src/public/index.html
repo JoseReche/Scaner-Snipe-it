@@ -267,6 +267,8 @@ let scanning=false
 let lastScan=null
 let scanLock=false
 
+const isSecureContextForCamera=window.isSecureContext||location.hostname==="localhost"||location.hostname==="127.0.0.1"
+
 const byId=(id)=>document.getElementById(id)
 
 function fillSelect(selectId,options,selectedValue,placeholder){
@@ -292,8 +294,7 @@ if(selectedValue) select.value=selectedValue
 
 async function loadOptions(){
 
-const res=await fetch("/options")
-const data=await res.json()
+const data=await apiFetch("/options")
 
 statusOptions=data.statuses||[]
 locationOptions=data.locations||[]
@@ -341,8 +342,7 @@ fillSelect("editRTD",locationOptions,asset.rtdLocationId,"Selecione")
 
 async function loadAsset(assetId){
 
-const res=await fetch("/asset/"+assetId)
-const data=await res.json()
+const data=await apiFetch("/asset/"+assetId)
 
 currentAssetId=data.id
 byId("manualAsset").value=data.id
@@ -366,6 +366,43 @@ if(!statusEl) return
 
 statusEl.textContent=message
 statusEl.style.color=isError?"#dc2626":""
+
+}
+
+async function apiFetch(url,options){
+
+try{
+const res=await fetch(url,options)
+const data=await res.json().catch(()=>null)
+
+if(!res.ok){
+const message=data?.error||`Falha na requisição (${res.status})`
+throw new Error(message)
+}
+
+return data
+}catch(error){
+if(error.message==="Failed to fetch"){
+throw new Error("Falha de conexão com o servidor. Verifique rede, HTTPS e CORS.")
+}
+
+throw error
+}
+
+}
+
+async function ensureCameraPermission(){
+
+if(!isSecureContextForCamera){
+throw new Error("A câmera no celular exige HTTPS. Abra o sistema em https:// para permitir o acesso.")
+}
+
+if(!navigator.mediaDevices?.getUserMedia){
+throw new Error("Este navegador não suporta acesso à câmera.")
+}
+
+const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"}}})
+stream.getTracks().forEach(track=>track.stop())
 
 }
 
@@ -417,12 +454,15 @@ rememberLastUsedCamera:true,
 
 }
 
-function startScanner(){
+async function startScanner(){
 
 if(scanning) return
 
 byId("reader").style.display="block"
 setScanStatus("Solicitando acesso à câmera...")
+
+try{
+await ensureCameraPermission()
 
 scanner=new Html5QrcodeScanner("reader",getScannerConfig(),false)
 
@@ -432,6 +472,10 @@ scanner.render(onScanSuccess,()=>{
 
 scanning=true
 setScanStatus("Câmera iniciada. Aponte para o QR Code.")
+}catch(error){
+byId("reader").style.display="none"
+setScanStatus(error.message||"Não foi possível iniciar a câmera.",true)
+}
 
 }
 
@@ -451,25 +495,28 @@ const btn=byId("saveButton")
 btn.disabled=true
 btn.textContent="Salvando..."
 
-const res=await fetch("/asset/"+currentAssetId,{
+try{
+const data=await apiFetch("/asset/"+currentAssetId,{
 method:"PATCH",
 headers:{"Content-Type":"application/json"},
 body:JSON.stringify(payload)
 })
 
-const data=await res.json()
-
 fillPanel(data.asset)
-
+alert("Ativo atualizado")
+}catch(error){
+alert(error.message||"Falha ao salvar o ativo")
+}finally{
 btn.disabled=false
 btn.textContent="Salvar alterações"
-
-alert("Ativo atualizado")
+}
 
 }
 
 setScanStatus("Toque em ESCANEAR QR CODE para abrir a câmera.")
-loadOptions()
+loadOptions().catch(error=>{
+setScanStatus(error.message||"Falha ao carregar opções iniciais.",true)
+})
 
 </script>
 
