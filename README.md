@@ -19,6 +19,17 @@ O frontend **nunca** chama a API do Snipe-IT diretamente.
     dashboard.html
     style.css
     app.js
+  /www
+    index.html
+    ativo.html
+    homeoffice.html
+    /js
+      config.js
+      api-client.js
+      index.js
+      ativo.js
+      homeoffice.js
+  config.xml
   .env
   package.json
 ```
@@ -65,7 +76,12 @@ node -e "require('bcrypt').hash('sua_senha_forte', 10).then(console.log)"
   - `dashboard.html`: total de ativos e listagem
   - token salvo no `localStorage`
 
-## Executar no GitHub Codespaces
+- App móvel com Cordova
+  - interface em `www/`
+  - configuração do app em `config.xml`
+  - suporte para build Android (APK)
+
+## Executar backend no GitHub Codespaces
 
 ```bash
 npm install
@@ -73,6 +89,38 @@ npm start
 ```
 
 O servidor sobe por padrão na porta **3000**.
+
+## Gerar APK Android com Cordova
+
+### Pré-requisitos
+
+- Node.js 18+
+- Java 17+
+- Android SDK com `platform-tools` e uma versão de build-tools instalada
+- Variáveis `ANDROID_HOME` (ou `ANDROID_SDK_ROOT`) e `JAVA_HOME` configuradas
+
+### Passos
+
+```bash
+npm install
+npm run cordova:android:add
+npm run cordova:prepare
+npm run cordova:android:build
+```
+
+APK de debug (gerado pelo Cordova):
+
+```text
+platforms/android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+### Configuração da API no app móvel
+
+Edite `www/js/config.js` antes do build:
+
+- `API_BASE_URL`: URL da API do Snipe-IT (ex: `https://empresa.snipeit/api/v1`)
+- `API_TOKEN`: token da API
+- `PA_FIELD_KEY`: chave do campo customizado de PA
 
 ## Segurança
 

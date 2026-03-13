@@ -1,0 +1,27 @@
+<?xml version='1.0' encoding='utf-8'?>
+<widget id="com.scanersnipeit.app" version="1.0.0" xmlns="http://www.w3.org/ns/widgets" xmlns:cdv="http://cordova.apache.org/ns/1.0">
+  <name>Scanner Snipe-IT</name>
+  <description>Aplicativo Cordova para consulta e atualização de ativos no Snipe-IT.</description>
+  <author email="dev@scanersnipeit.local" href="https://example.com">Scanner Snipe-IT Team</author>
+
+  <content src="index.html" />
+  <allow-navigation href="*" />
+  <allow-intent href="http://*/*" />
+  <allow-intent href="https://*/*" />
+
+  <preference name="AndroidXEnabled" value="true" />
+  <preference name="Scheme" value="https" />
+  <preference name="Hostname" value="localhost" />
+  <preference name="MixedContentMode" value="0" />
+  <preference name="SplashScreenDelay" value="0" />
+
+  <platform name="android">
+    <allow-intent href="market:*" />
+    <edit-config file="app/src/main/AndroidManifest.xml" mode="merge" target="/manifest/uses-permission">
+      <uses-permission android:name="android.permission.CAMERA" xmlns:android="http://schemas.android.com/apk/res/android" />
+    </edit-config>
+    <preference name="AndroidInsecureFileModeEnabled" value="false" />
+  </platform>
+
+  <plugin name="cordova-plugin-inappbrowser" spec="^6.0.0" />
+</widget>
