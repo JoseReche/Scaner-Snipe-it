@@ -25,3 +25,8 @@ TestResults.xml
 
 node_modules/
 src/node_modules/
+
+# Cordova artifacts
+platforms/
+plugins/
+www/res/
