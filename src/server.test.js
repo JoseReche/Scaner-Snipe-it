@@ -263,7 +263,7 @@ test('POST /api/auth/register cria usuário e impede matrícula duplicada', asyn
 })
 
 
-test('GET /asset/:id propaga 401 quando API key do usuário é rejeitada pelo Snipe-IT', async () => {
+test('GET /asset/:id retorna 400 quando API key do usuário é rejeitada pelo Snipe-IT', async () => {
   const originalGet = axios.get
 
   axios.get = async () => {
@@ -287,7 +287,7 @@ test('GET /asset/:id propaga 401 quando API key do usuário é rejeitada pelo Sn
     const response = await fetch(`http://127.0.0.1:${port}/asset/1`, { headers: authHeader() })
     const data = await response.json()
 
-    assert.equal(response.status, 401)
+    assert.equal(response.status, 400)
     assert.match(data.error, /Erro ao buscar ativo/)
     assert.match(data.error, /API Key pessoal inválida, expirada ou sem permissão no Snipe-IT/)
   } finally {
@@ -297,7 +297,7 @@ test('GET /asset/:id propaga 401 quando API key do usuário é rejeitada pelo Sn
 })
 
 
-test('GET /options propaga 401 com mensagem amigável quando a API key do usuário é inválida', async () => {
+test('GET /options retorna 400 com mensagem amigável quando a API key do usuário é inválida', async () => {
   const originalGet = axios.get
 
   axios.get = async () => {
@@ -321,7 +321,7 @@ test('GET /options propaga 401 com mensagem amigável quando a API key do usuár
     const response = await fetch(`http://127.0.0.1:${port}/options`, { headers: authHeader() })
     const data = await response.json()
 
-    assert.equal(response.status, 401)
+    assert.equal(response.status, 400)
     assert.match(data.error, /Erro ao buscar listas de status e local/)
     assert.match(data.error, /API Key pessoal inválida, expirada ou sem permissão no Snipe-IT/)
   } finally {
