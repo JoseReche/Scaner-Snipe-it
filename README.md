@@ -38,6 +38,11 @@ npm install
   - valida matrícula + senha
   - aplica rate limit e bloqueio por tentativas inválidas
   - gera JWT com expiração (`JWT_EXPIRES_IN`)
+- `POST /api/auth/register`
+  - cria usuário novo com matrícula única
+  - valida senha forte no backend
+  - recebe a chave pessoal da API e persiste criptografada no `users.json`
+  - persiste hash bcrypt no `users.json`
 - `POST /api/auth/change-password`
   - rota protegida por JWT
   - valida senha atual
@@ -47,6 +52,7 @@ npm install
 ## Frontend
 
 - `/login.html`
+- `/register.html`
 - `/dashboard.html`
 - `/change-password.html`
 

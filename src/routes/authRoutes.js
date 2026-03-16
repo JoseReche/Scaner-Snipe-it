@@ -1,7 +1,7 @@
 const express = require('express')
 const rateLimit = require('express-rate-limit')
 const { body } = require('express-validator')
-const { login, changePassword } = require('../controllers/authController')
+const { login, register, changePassword } = require('../controllers/authController')
 const { authMiddleware } = require('../middleware/authMiddleware')
 const { validationMiddleware } = require('../middleware/validationMiddleware')
 
@@ -22,6 +22,16 @@ router.post(
   body('password').isString().isLength({ min: 8, max: 128 }),
   validationMiddleware,
   login
+)
+
+
+router.post(
+  '/register',
+  body('matricula').isString().trim().notEmpty().isLength({ min: 3, max: 30 }),
+  body('password').isString().isLength({ min: 12, max: 128 }).matches(/[A-Z]/).matches(/[a-z]/).matches(/[0-9]/).matches(/[^A-Za-z0-9]/),
+  body('apiKey').isString().trim().notEmpty().isLength({ min: 10, max: 512 }),
+  validationMiddleware,
+  register
 )
 
 router.post(
