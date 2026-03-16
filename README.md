@@ -66,6 +66,20 @@ npm test
 npm start
 ```
 
+## Testes automatizados
+
+Os testes são executados com o runner nativo do Node (`node --test`) via `npm test` dentro de `src/`.
+
+Principais cenários cobertos em `src/server.test.js`:
+
+- parsing e mapeamento de custom fields (incluindo fallback para `db_column`)
+- montagem de payload de atualização de ativos
+- atualização de ativo (`PATCH /asset/:id`)
+- consulta de informações de movimentação (`GET /move-info`)
+- atualização de PA em campo customizado (`POST /move`)
+- fluxo de autenticação (`register`/`login`) com proteção de matrícula duplicada
+- propagação amigável de erro `401` quando a API key do usuário é inválida no Snipe-IT
+
 
 ## Rotas SIpe
 
