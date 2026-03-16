@@ -258,12 +258,6 @@ const normalizeSnipeMessages = (raw) => {
 const getErrorStatusCode = (error) => {
   const statusCode = error.statusCode || error.response?.status
 
-  if (statusCode === 401 && error.response) {
-    // 401 vindo do Snipe-IT normalmente indica API key pessoal inválida/expirada,
-    // não sessão JWT inválida do usuário logado.
-    return 400
-  }
-
   if (typeof statusCode === "number" && statusCode >= 400) {
     return statusCode
   }
