@@ -3,6 +3,9 @@ const dotenv = require("dotenv")
 const express = require("express")
 const axios = require("axios")
 const cors = require("cors")
+const { authRouter } = require("./routes/authRoutes")
+const { sipeRouter } = require("./routes/sipeRoutes")
+const { authMiddleware } = require("./middleware/authMiddleware")
 
 dotenv.config({ path: path.join(__dirname, "..", ".env") })
 
@@ -11,6 +14,9 @@ const app = express()
 app.use(cors())
 app.use(express.json())
 app.use(express.static(path.join(__dirname, "public")))
+
+app.use("/api/auth", authRouter)
+app.use("/api/sipe", sipeRouter)
 
 const SNIPE_URL = process.env.SNIPE_URL || "https://SEU-SNIPE/api/v1"
 const API_KEY = process.env.SNIPE_API_KEY || "SEU_TOKEN_API"
@@ -285,6 +291,8 @@ const buildAssetPayload = async (assetId, body) => {
 
   return payload
 }
+
+app.use(authMiddleware)
 
 app.use((req, res, next) => {
   if (!hasValidConfig) {

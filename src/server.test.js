@@ -3,8 +3,10 @@ const assert = require('node:assert/strict')
 
 process.env.SNIPE_URL = 'http://snipe.local/api/v1'
 process.env.SNIPE_API_KEY = 'token-valido'
+process.env.JWT_SECRET = 'test-secret'
 
 const axios = require('axios')
+const { generateAccessToken } = require('./auth/jwt')
 const {
   app,
   buildAssetPayload,
@@ -27,6 +29,8 @@ const baseAsset = {
   }
 }
 
+
+const authHeader = () => ({ Authorization: `Bearer ${generateAccessToken({ matricula: '12345' })}` })
 test('parseIntegerField converte inteiros e ignora inválidos', () => {
   assert.equal(parseIntegerField('20'), 20)
   assert.equal(parseIntegerField(33), 33)
@@ -112,7 +116,7 @@ test('PATCH /asset/:id aplica atualização e devolve ativo mapeado', async () =
   try {
     const response = await fetch(`http://127.0.0.1:${port}/asset/10`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeader() },
       body: JSON.stringify({ pa: 'PA-API', status_id: '7' })
     })
     const data = await response.json()
@@ -145,7 +149,7 @@ test('GET /move-info retorna o payload bruto do Snipe-IT', async () => {
   const { port } = server.address()
 
   try {
-    const response = await fetch(`http://127.0.0.1:${port}/move-info?asset=10`)
+    const response = await fetch(`http://127.0.0.1:${port}/move-info?asset=10`, { headers: authHeader() })
     const data = await response.json()
 
     assert.equal(response.status, 200)
@@ -172,7 +176,7 @@ test('POST /move atualiza o campo customizado _snipeit_pa_6', async () => {
   try {
     const response = await fetch(`http://127.0.0.1:${port}/move`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...authHeader() },
       body: JSON.stringify({ asset: 10, pa: 'PA-NOVO' })
     })
     const data = await response.json()
