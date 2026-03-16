@@ -113,6 +113,15 @@ clearJwtToken()
 window.location.href="/login.html"
 }
 
+function isAuthTokenError(data){
+
+const message=(data?.error||"").toLowerCase()
+
+return message.includes("token inválido") || message.includes("token ausente") || message.includes("token expirado")
+
+}
+
+
 function fillSelect(selectId,options,selectedValue,placeholder){
 
 const select=byId(selectId)
@@ -139,8 +148,13 @@ async function loadOptions(){
 const res=await fetch("/options",{headers:authHeaders()})
 const data=await res.json()
 
-if(res.status===401){
+if(res.status===401 && isAuthTokenError(data)){
 logout()
+return
+}
+
+if(!res.ok){
+alert(data.error||"Falha ao carregar opções")
 return
 }
 
@@ -207,7 +221,7 @@ await ensureOptionsLoaded()
 const res=await fetch("/asset/"+assetId,{headers:authHeaders()})
 const data=await res.json()
 
-if(res.status===401){
+if(res.status===401 && isAuthTokenError(data)){
 logout()
 return
 }
@@ -297,7 +311,7 @@ body:JSON.stringify(payload)
 
 const data=await res.json()
 
-if(res.status===401){
+if(res.status===401 && isAuthTokenError(data)){
 logout()
 return
 }

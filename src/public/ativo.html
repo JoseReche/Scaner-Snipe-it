@@ -48,11 +48,22 @@
         window.location.href = '/login.html'
       }
 
+      const isAuthTokenError = (data) => {
+        const message = (data?.error || '').toLowerCase()
+        return message.includes('token inválido') || message.includes('token ausente') || message.includes('token expirado')
+      }
+
       fetch('/asset/' + asset, { headers: authHeaders() })
         .then((r) => {
           if (r.status === 401) {
-            logout()
-            return null
+            return r.json().then((data) => {
+              if (isAuthTokenError(data)) {
+                logout()
+                return null
+              }
+
+              return { ok: false, data }
+            })
           }
 
           return r.json().then((data) => ({ ok: r.ok, data }))
@@ -90,8 +101,14 @@
         })
           .then((r) => {
             if (r.status === 401) {
-              logout()
-              return null
+              return r.json().then((data) => {
+                if (isAuthTokenError(data)) {
+                  logout()
+                  return null
+                }
+
+                return { ok: false, data }
+              })
             }
 
             return r.json().then((data) => ({ ok: r.ok, data }))

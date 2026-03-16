@@ -46,6 +46,11 @@
         window.location.href = '/login.html'
       }
 
+      const isAuthTokenError = (data) => {
+        const message = (data?.error || '').toLowerCase()
+        return message.includes('token inválido') || message.includes('token ausente') || message.includes('token expirado')
+      }
+
       async function checkout(asset, user) {
         const response = await fetch('/checkout', {
           method: 'POST',
@@ -58,12 +63,12 @@
           })
         })
 
-        if (response.status === 401) {
+        const data = await response.json()
+
+        if (response.status === 401 && isAuthTokenError(data)) {
           logout()
           return
         }
-
-        const data = await response.json()
 
         if (!response.ok) {
           throw new Error(data.error || 'Falha no checkout')

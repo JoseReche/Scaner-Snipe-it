@@ -36,7 +36,7 @@ npm install
 - `POST /api/auth/login`
   - valida matrícula + senha
   - aplica rate limit e bloqueio por tentativas inválidas
-  - gera JWT com expiração (`JWT_EXPIRES_IN`)
+  - gera JWT com expiração (`JWT_EXPIRES_IN`, padrão `3h`)
 - `POST /api/auth/register`
   - cria usuário novo com matrícula única
   - valida senha forte no backend

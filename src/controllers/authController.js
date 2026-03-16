@@ -72,7 +72,7 @@ const login = async (req, res) => {
     ...getRequestMeta(req)
   })
 
-  return res.json({ token, expiresIn: process.env.JWT_EXPIRES_IN || '1h' })
+  return res.json({ token, expiresIn: process.env.JWT_EXPIRES_IN || '3h' })
 }
 
 

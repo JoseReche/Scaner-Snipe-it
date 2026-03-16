@@ -388,6 +388,7 @@ test('POST /api/auth/register e POST /api/auth/login não consultam API do Snipe
 
     assert.equal(loginResponse.status, 200)
     assert.equal(typeof loginData.token, 'string')
+    assert.equal(loginData.expiresIn, '3h')
     assert.equal(externalCalls, 0)
   } finally {
     server.close()
