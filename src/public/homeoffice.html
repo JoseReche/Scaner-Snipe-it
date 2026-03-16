@@ -1,109 +1,60 @@
-<!DOCTYPE html>
-<html>
-<head>
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kit Home Office</title>
+    <link rel="stylesheet" href="/auth.css" />
+  </head>
+  <body>
+    <div class="container">
+      <div class="topbar">
+        <h3>Entrega Kit Home Office</h3>
+        <a href="/scanner.html">Voltar ao scanner</a>
+      </div>
 
-<meta charset="UTF-8">
+      <div class="grid" style="grid-template-columns: minmax(0, 480px)">
+        <section class="card">
+          <label for="usuario">ID do usuário</label>
+          <input id="usuario" placeholder="ID do usuário" />
 
-<title>Kit Home Office</title>
+          <label for="mouse">ID Mouse</label>
+          <input id="mouse" placeholder="ID Mouse" />
 
-<style>
+          <label for="teclado">ID Teclado</label>
+          <input id="teclado" placeholder="ID Teclado" />
 
-body{
-font-family:Arial;
-background:#f4f6f8;
-padding:20px;
-}
+          <label for="headset">ID Headset</label>
+          <input id="headset" placeholder="ID Headset" />
 
-.card{
+          <button onclick="entregar()">Entregar Kit</button>
+        </section>
+      </div>
+    </div>
 
-background:white;
-padding:20px;
-border-radius:10px;
-max-width:400px;
-margin:auto;
+    <script>
+      function checkout(asset, user) {
+        return fetch('/checkout', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            asset,
+            user
+          })
+        })
+      }
 
-}
+      async function entregar() {
+        const user = document.getElementById('usuario').value
 
-input{
-width:100%;
-padding:10px;
-margin-bottom:10px;
-}
+        await checkout(document.getElementById('mouse').value, user)
+        await checkout(document.getElementById('teclado').value, user)
+        await checkout(document.getElementById('headset').value, user)
 
-button{
-
-width:100%;
-padding:12px;
-background:#16a34a;
-color:white;
-border:none;
-border-radius:8px;
-
-}
-
-</style>
-
-</head>
-
-<body>
-
-<div class="card">
-
-<h2>Entrega Kit Home Office</h2>
-
-<input id="usuario" placeholder="ID do usuário">
-
-<input id="mouse" placeholder="ID Mouse">
-
-<input id="teclado" placeholder="ID Teclado">
-
-<input id="headset" placeholder="ID Headset">
-
-<button onclick="entregar()">Entregar Kit</button>
-
-</div>
-
-<script>
-
-function checkout(asset,user){
-
-return fetch("/checkout",{
-method:"POST",
-headers:{
-"Content-Type":"application/json"
-},
-body:JSON.stringify({
-asset:asset,
-user:user
-})
-})
-
-}
-
-async function entregar(){
-
-let user = document.getElementById("usuario").value
-
-await checkout(
-document.getElementById("mouse").value,
-user
-)
-
-await checkout(
-document.getElementById("teclado").value,
-user
-)
-
-await checkout(
-document.getElementById("headset").value,
-user
-)
-
-alert("Kit entregue")
-
-}
-
-</script>
-
-</body>
+        alert('Kit entregue')
+      }
+    </script>
+  </body>
 </html>
