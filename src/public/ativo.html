@@ -31,18 +31,59 @@
       </div>
     </div>
 
+    <script src="/js/auth.js"></script>
     <script>
+      requireAuthToken()
+
       const params = new URLSearchParams(location.search)
       const asset = params.get('id')
 
-      fetch('/asset/' + asset)
-        .then((r) => r.json())
-        .then((data) => {
-          document.getElementById('empresa').innerHTML = '<b>Empresa:</b> ' + data.empresa
-          document.getElementById('marca').innerHTML = '<b>Marca:</b> ' + data.marca
-          document.getElementById('status').innerHTML = '<b>Situação:</b> ' + data.status
-          document.getElementById('local').innerHTML = '<b>Local:</b> ' + data.local
-          document.getElementById('pa').innerHTML = '<b>PA:</b> ' + data.pa
+      const authHeaders = (extra = {}) => ({
+        ...extra,
+        Authorization: `Bearer ${getJwtToken()}`
+      })
+
+      const logout = () => {
+        clearJwtToken()
+        window.location.href = '/login.html'
+      }
+
+      const isAuthTokenError = (data) => {
+        const message = (data?.error || '').toLowerCase()
+        return message.includes('token inválido') || message.includes('token ausente') || message.includes('token expirado')
+      }
+
+      fetch('/asset/' + asset, { headers: authHeaders() })
+        .then((r) => {
+          if (r.status === 401) {
+            return r.json().then((data) => {
+              if (isAuthTokenError(data)) {
+                logout()
+                return null
+              }
+
+              return { ok: false, data }
+            })
+          }
+
+          return r.json().then((data) => ({ ok: r.ok, data }))
+        })
+        .then((result) => {
+          if (!result) {
+            return
+          }
+
+          if (!result.ok) {
+            alert(result.data.error || 'Falha ao carregar ativo')
+            return
+          }
+
+          const data = result.data
+          document.getElementById('empresa').innerHTML = '<b>Empresa:</b> ' + (data.company || '-')
+          document.getElementById('marca').innerHTML = '<b>Marca:</b> ' + (data.manufacturer || '-')
+          document.getElementById('status').innerHTML = '<b>Situação:</b> ' + (data.status || '-')
+          document.getElementById('local').innerHTML = '<b>Local:</b> ' + (data.location || '-')
+          document.getElementById('pa').innerHTML = '<b>PA:</b> ' + (data.pa || '-')
         })
 
       function mover() {
@@ -50,16 +91,40 @@
 
         fetch('/move', {
           method: 'POST',
-          headers: {
+          headers: authHeaders({
             'Content-Type': 'application/json'
-          },
+          }),
           body: JSON.stringify({
             asset,
             pa
           })
-        }).then(() => {
-          alert('Atualizado')
         })
+          .then((r) => {
+            if (r.status === 401) {
+              return r.json().then((data) => {
+                if (isAuthTokenError(data)) {
+                  logout()
+                  return null
+                }
+
+                return { ok: false, data }
+              })
+            }
+
+            return r.json().then((data) => ({ ok: r.ok, data }))
+          })
+          .then((result) => {
+            if (!result) {
+              return
+            }
+
+            if (!result.ok) {
+              alert(result.data.error || 'Falha ao atualizar PA')
+              return
+            }
+
+            alert('Atualizado')
+          })
       }
     </script>
   </body>

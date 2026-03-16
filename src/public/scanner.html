@@ -16,7 +16,7 @@
 
 <div class="topbar">
 <h3>Scanner de Ativos</h3>
-<a href="/login.html">Ir para login</a>
+<a href="#" onclick="logout(event)">Sair</a>
 </div>
 
 <div class="grid scanner-grid">
@@ -87,16 +87,40 @@ Escaneie um ativo para visualizar e editar os dados.
 </div>
 </div>
 
+<script src="/js/auth.js"></script>
 <script>
+
+requireAuthToken()
 
 let currentAssetId=null
 let statusOptions=[]
 let locationOptions=[]
+let optionsLoaded=false
 let scanner=null
 let scanning=false
 let lastScan=null
 
 const byId=(id)=>document.getElementById(id)
+
+const authHeaders = (extra = {}) => ({
+...extra,
+Authorization: `Bearer ${getJwtToken()}`
+})
+
+function logout(event){
+if(event) event.preventDefault()
+clearJwtToken()
+window.location.href="/login.html"
+}
+
+function isAuthTokenError(data){
+
+const message=(data?.error||"").toLowerCase()
+
+return message.includes("token inválido") || message.includes("token ausente") || message.includes("token expirado")
+
+}
+
 
 function fillSelect(selectId,options,selectedValue,placeholder){
 
@@ -121,8 +145,18 @@ if(selectedValue) select.value=selectedValue
 
 async function loadOptions(){
 
-const res=await fetch("/options")
+const res=await fetch("/options",{headers:authHeaders()})
 const data=await res.json()
+
+if(res.status===401 && isAuthTokenError(data)){
+logout()
+return
+}
+
+if(!res.ok){
+alert(data.error||"Falha ao carregar opções")
+return
+}
 
 statusOptions=data.statuses||[]
 locationOptions=data.locations||[]
@@ -130,6 +164,18 @@ locationOptions=data.locations||[]
 fillSelect("editStatus",statusOptions,null,"Selecione")
 fillSelect("editLocation",locationOptions,null,"Selecione")
 fillSelect("editRTD",locationOptions,null,"Selecione")
+optionsLoaded=true
+
+}
+
+
+async function ensureOptionsLoaded(){
+
+if(optionsLoaded) return true
+
+await loadOptions()
+
+return optionsLoaded
 
 }
 
@@ -170,8 +216,20 @@ fillSelect("editRTD",locationOptions,asset.rtdLocationId,"Selecione")
 
 async function loadAsset(assetId){
 
-const res=await fetch("/asset/"+assetId)
+await ensureOptionsLoaded()
+
+const res=await fetch("/asset/"+assetId,{headers:authHeaders()})
 const data=await res.json()
+
+if(res.status===401 && isAuthTokenError(data)){
+logout()
+return
+}
+
+if(!res.ok){
+alert(data.error||"Falha ao buscar ativo")
+return
+}
 
 currentAssetId=data.id
 byId("manualAsset").value=data.id
@@ -208,9 +266,11 @@ loadAsset(id)
 
 }
 
-function startScanner(){
+async function startScanner(){
 
 if(scanning) return
+
+await ensureOptionsLoaded()
 
 byId("reader").style.display="block"
 
@@ -245,11 +305,23 @@ btn.textContent="Salvando..."
 
 const res=await fetch("/asset/"+currentAssetId,{
 method:"PATCH",
-headers:{"Content-Type":"application/json"},
+headers:authHeaders({"Content-Type":"application/json"}),
 body:JSON.stringify(payload)
 })
 
 const data=await res.json()
+
+if(res.status===401 && isAuthTokenError(data)){
+logout()
+return
+}
+
+if(!res.ok){
+alert(data.error||"Falha ao atualizar ativo")
+btn.disabled=false
+btn.textContent="Salvar alterações"
+return
+}
 
 fillPanel(data.asset)
 
@@ -259,8 +331,6 @@ btn.textContent="Salvar alterações"
 alert("Ativo atualizado")
 
 }
-
-loadOptions()
 
 </script>
 

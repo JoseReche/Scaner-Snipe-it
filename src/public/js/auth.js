@@ -42,7 +42,7 @@ const setupLoginForm = (formId, messageId) => {
     }
 
     setJwtToken(data.token)
-    window.location.href = '/dashboard.html'
+    window.location.href = '/scanner.html'
   })
 }
 

@@ -9,7 +9,7 @@ const getJwtConfig = () => {
 
   return {
     secret,
-    expiresIn: process.env.JWT_EXPIRES_IN || '1h'
+    expiresIn: process.env.JWT_EXPIRES_IN || '3h'
   }
 }
 
