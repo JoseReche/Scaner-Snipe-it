@@ -7,7 +7,6 @@ process.env.ENCRYPTION_KEY = 'encryption-key-test'
 
 const axios = require('axios')
 const { generateAccessToken } = require('./auth/jwt')
-const { decryptApiKey, encryptApiKey } = require('./auth/crypto')
 const {
   app,
   buildAssetPayload,
@@ -28,7 +27,7 @@ test.before(async () => {
     {
       matricula: '12345',
       password_hash: '$2a$12$GF6lXBdL2ZG9zDM7wJRf3uK9r51PgUf8hX6HZv8vfUzqZJZXg5iAS',
-      api_key_encrypted: encryptApiKey('api-key-teste-12345'),
+      api_key: 'api-key-teste-12345',
       created_at: '2026-01-01T00:00:00.000Z'
     }
   ]
@@ -244,8 +243,7 @@ test('POST /api/auth/register cria usuário e impede matrícula duplicada', asyn
     const createdUser = usersAfterRegister.find((user) => user.matricula === uniqueMatricula)
 
     assert.ok(createdUser)
-    assert.equal(typeof createdUser.api_key_encrypted, 'string')
-    assert.equal(decryptApiKey(createdUser.api_key_encrypted), payload.apiKey)
+    assert.equal(createdUser.api_key, payload.apiKey)
 
     const duplicateResponse = await fetch(`http://127.0.0.1:${port}/api/auth/register`, {
       method: 'POST',

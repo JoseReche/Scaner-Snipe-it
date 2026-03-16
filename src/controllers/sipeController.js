@@ -10,11 +10,12 @@ const getAssetFromSipe = async (req, res) => {
       return res.status(404).json({ error: 'Usuário autenticado não encontrado' })
     }
 
-    if (!user.api_key_encrypted) {
+    const apiKey = user.api_key || (user.api_key_encrypted ? decryptApiKey(user.api_key_encrypted) : null)
+
+    if (!apiKey) {
       return res.status(400).json({ error: 'Usuário sem API Key cadastrada' })
     }
 
-    const apiKey = decryptApiKey(user.api_key_encrypted)
     const asset = await fetchAssetByIdWithUserKey(req.params.id, apiKey)
 
     return res.json(asset)

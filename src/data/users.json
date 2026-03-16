@@ -2,7 +2,7 @@
   {
     "matricula": "12345",
     "password_hash": "$2a$12$GF6lXBdL2ZG9zDM7wJRf3uK9r51PgUf8hX6HZv8vfUzqZJZXg5iAS",
-    "api_key_encrypted": "e29e4e5e45de3a33a04ac0f9:4fd629ae6a42c4ed1a4815cf66b1d116:1ac6fb0fa75df177aa6300fe9e3e102a8224b7",
+    "api_key": "api-key-teste-12345",
     "created_at": "2026-01-01T00:00:00.000Z"
   }
 ]

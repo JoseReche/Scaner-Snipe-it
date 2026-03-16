@@ -13,7 +13,6 @@ cp .env.example .env
 2. Edite o `.env`:
 
 - `JWT_SECRET`
-- `ENCRYPTION_KEY`
 - `SIPE_API_BASE`
 - `SNIPE_URL`
 
@@ -26,10 +25,10 @@ npm install
 
 ## Estrutura
 
-- `src/data/users.json`: usuários com `matricula`, `password_hash` (bcrypt) e `api_key_encrypted` (AES-256-GCM).
+- `src/data/users.json`: usuários com `matricula`, `password_hash` (bcrypt) e `api_key` (token pessoal da API).
 - `src/routes/authRoutes.js`: login e alteração de senha.
 - `src/middleware/authMiddleware.js`: proteção por JWT.
-- `src/routes/sipeRoutes.js`: integração privada com SIpe IT usando API key descriptografada somente no backend.
+- `src/routes/sipeRoutes.js`: integração privada com SIpe IT usando API key pessoal do usuário no backend.
 
 ## Fluxo de autenticação
 
@@ -40,7 +39,7 @@ npm install
 - `POST /api/auth/register`
   - cria usuário novo com matrícula única
   - valida senha forte no backend
-  - recebe a chave pessoal da API e persiste criptografada no `users.json`
+  - recebe a chave pessoal da API e persiste no `users.json`
   - persiste hash bcrypt no `users.json`
 - `POST /api/auth/change-password`
   - rota protegida por JWT

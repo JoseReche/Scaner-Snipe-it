@@ -41,15 +41,19 @@ const getUserHeaders = async (req) => {
     throw error
   }
 
-  if (!user.api_key_encrypted) {
-    const error = new Error("Usuário sem API Key cadastrada")
-    error.statusCode = 400
-    throw error
+  const apiKey = user.api_key
+
+  if (apiKey) {
+    return buildHeadersFromApiKey(apiKey)
   }
 
-  const apiKey = decryptApiKey(user.api_key_encrypted)
+  if (user.api_key_encrypted) {
+    return buildHeadersFromApiKey(decryptApiKey(user.api_key_encrypted))
+  }
 
-  return buildHeadersFromApiKey(apiKey)
+  const error = new Error("Usuário sem API Key cadastrada")
+  error.statusCode = 400
+  throw error
 }
 
 const customFieldValue = (asset, fieldName) => {
