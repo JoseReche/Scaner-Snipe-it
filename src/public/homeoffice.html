@@ -32,28 +32,56 @@
       </div>
     </div>
 
+    <script src="/js/auth.js"></script>
     <script>
-      function checkout(asset, user) {
-        return fetch('/checkout', {
+      requireAuthToken()
+
+      const authHeaders = (extra = {}) => ({
+        ...extra,
+        Authorization: `Bearer ${getJwtToken()}`
+      })
+
+      const logout = () => {
+        clearJwtToken()
+        window.location.href = '/login.html'
+      }
+
+      async function checkout(asset, user) {
+        const response = await fetch('/checkout', {
           method: 'POST',
-          headers: {
+          headers: authHeaders({
             'Content-Type': 'application/json'
-          },
+          }),
           body: JSON.stringify({
             asset,
             user
           })
         })
+
+        if (response.status === 401) {
+          logout()
+          return
+        }
+
+        const data = await response.json()
+
+        if (!response.ok) {
+          throw new Error(data.error || 'Falha no checkout')
+        }
       }
 
       async function entregar() {
         const user = document.getElementById('usuario').value
 
-        await checkout(document.getElementById('mouse').value, user)
-        await checkout(document.getElementById('teclado').value, user)
-        await checkout(document.getElementById('headset').value, user)
+        try {
+          await checkout(document.getElementById('mouse').value, user)
+          await checkout(document.getElementById('teclado').value, user)
+          await checkout(document.getElementById('headset').value, user)
 
-        alert('Kit entregue')
+          alert('Kit entregue')
+        } catch (error) {
+          alert(error.message)
+        }
       }
     </script>
   </body>

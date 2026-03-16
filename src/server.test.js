@@ -2,7 +2,6 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 
 process.env.SNIPE_URL = 'http://snipe.local/api/v1'
-process.env.SNIPE_API_KEY = 'token-valido'
 process.env.JWT_SECRET = 'test-secret'
 process.env.ENCRYPTION_KEY = 'encryption-key-test'
 
