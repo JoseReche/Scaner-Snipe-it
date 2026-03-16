@@ -51,6 +51,18 @@ body {
   grid-template-columns: 340px 1fr;
 }
 
+.single-column {
+  grid-template-columns: minmax(0, 620px);
+  justify-content: center;
+}
+
+.register-link a {
+  color: var(--primary);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+
 .card {
   background: var(--card);
   border-radius: 10px;

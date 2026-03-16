@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Criar usuário</title>
+    <link rel="stylesheet" href="/auth.css" />
+  </head>
+  <body>
+    <div class="container">
+      <div class="topbar">
+        <h3>Scaner Snipe-IT</h3>
+        <a href="/login.html">Voltar ao login</a>
+      </div>
+
+      <div class="grid single-column">
+        <section class="card">
+          <h1>Criar usuário</h1>
+          <p class="small">Cadastre uma matrícula e senha forte para acessar o sistema.</p>
+
+          <form id="register-form">
+            <label for="matricula">Matrícula</label>
+            <input id="matricula" name="matricula" required minlength="3" maxlength="30" />
+
+            <label for="password">Senha</label>
+            <input id="password" name="password" type="password" required minlength="12" />
+
+            <p class="small">A senha deve conter letra maiúscula, minúscula, número e símbolo.</p>
+
+            <div class="actions">
+              <button type="submit">Criar usuário</button>
+            </div>
+          </form>
+
+          <p id="message" class="message" aria-live="polite"></p>
+        </section>
+      </div>
+    </div>
+
+    <script src="/js/auth.js"></script>
+    <script>
+      setupRegisterForm('register-form', 'message')
+    </script>
+  </body>
+</html>

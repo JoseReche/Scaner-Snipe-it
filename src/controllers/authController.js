@@ -1,4 +1,4 @@
-const { findUserByMatricula, updateUser } = require('../services/userStore')
+const { findUserByMatricula, updateUser, createUser } = require('../services/userStore')
 const { verifyPassword, hashPassword } = require('../auth/password')
 const { generateAccessToken } = require('../auth/jwt')
 const { getLoginState, registerFailure, clearAttempts } = require('../services/loginAttemptService')
@@ -74,6 +74,34 @@ const login = async (req, res) => {
   return res.json({ token, expiresIn: process.env.JWT_EXPIRES_IN || '1h' })
 }
 
+
+const register = async (req, res) => {
+  const { matricula, password } = req.body
+
+  const existingUser = await findUserByMatricula(matricula)
+
+  if (existingUser) {
+    return res.status(409).json({ error: 'Matrícula já cadastrada' })
+  }
+
+  const passwordHash = await hashPassword(password)
+
+  await createUser({
+    matricula,
+    password_hash: passwordHash,
+    created_at: new Date().toISOString()
+  })
+
+  await writeAuthLog({
+    event: 'register',
+    matricula,
+    success: true,
+    ...getRequestMeta(req)
+  })
+
+  return res.status(201).json({ success: true })
+}
+
 const changePassword = async (req, res) => {
   const { currentPassword, newPassword } = req.body
   const matricula = req.user.matricula
@@ -118,5 +146,6 @@ const changePassword = async (req, res) => {
 
 module.exports = {
   login,
+  register,
   changePassword
 }
