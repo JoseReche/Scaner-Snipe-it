@@ -51,10 +51,19 @@ const updateUser = async (matricula, updater) => {
   return users[index]
 }
 
+const createUser = async (userData) => {
+  const users = await readUsers()
+  users.push(userData)
+  await writeUsers(users)
+
+  return userData
+}
+
 module.exports = {
   USERS_FILE,
   readUsers,
   writeUsers,
+  createUser,
   findUserByMatricula,
   updateUser
 }

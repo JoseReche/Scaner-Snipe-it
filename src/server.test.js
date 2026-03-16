@@ -4,9 +4,11 @@ const assert = require('node:assert/strict')
 process.env.SNIPE_URL = 'http://snipe.local/api/v1'
 process.env.SNIPE_API_KEY = 'token-valido'
 process.env.JWT_SECRET = 'test-secret'
+process.env.ENCRYPTION_KEY = 'encryption-key-test'
 
 const axios = require('axios')
 const { generateAccessToken } = require('./auth/jwt')
+const { decryptApiKey, encryptApiKey } = require('./auth/crypto')
 const {
   app,
   buildAssetPayload,
@@ -14,6 +16,30 @@ const {
   mapCustomFieldLabelToKey,
   findPaCustomFieldKey
 } = require('./server')
+
+
+const fs = require('fs/promises')
+const usersPath = require('path').join(__dirname, 'data', 'users.json')
+let originalUsersFile = '[]\n'
+
+test.before(async () => {
+  originalUsersFile = await fs.readFile(usersPath, 'utf8')
+
+  const users = [
+    {
+      matricula: '12345',
+      password_hash: '$2a$12$GF6lXBdL2ZG9zDM7wJRf3uK9r51PgUf8hX6HZv8vfUzqZJZXg5iAS',
+      api_key_encrypted: encryptApiKey('api-key-teste-12345'),
+      created_at: '2026-01-01T00:00:00.000Z'
+    }
+  ]
+
+  await fs.writeFile(usersPath, `${JSON.stringify(users, null, 2)}\n`, 'utf8')
+})
+
+test.after(async () => {
+  await fs.writeFile(usersPath, originalUsersFile, 'utf8')
+})
 
 const baseAsset = {
   id: 10,
@@ -189,5 +215,50 @@ test('POST /move atualiza o campo customizado _snipeit_pa_6', async () => {
   } finally {
     server.close()
     axios.patch = originalPatch
+  }
+})
+
+test('POST /api/auth/register cria usuário e impede matrícula duplicada', async () => {
+  const server = app.listen(0)
+  const { port } = server.address()
+
+  try {
+    const uniqueMatricula = `u${Date.now()}`
+    const payload = {
+      matricula: uniqueMatricula,
+      password: 'SenhaSuperForte!2026',
+      apiKey: 'minha-chave-pessoal-123456'
+    }
+
+    const registerResponse = await fetch(`http://127.0.0.1:${port}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+
+    const registerData = await registerResponse.json()
+
+    assert.equal(registerResponse.status, 201)
+    assert.equal(registerData.success, true)
+
+    const usersAfterRegister = JSON.parse(await fs.readFile(usersPath, 'utf8'))
+    const createdUser = usersAfterRegister.find((user) => user.matricula === uniqueMatricula)
+
+    assert.ok(createdUser)
+    assert.equal(typeof createdUser.api_key_encrypted, 'string')
+    assert.equal(decryptApiKey(createdUser.api_key_encrypted), payload.apiKey)
+
+    const duplicateResponse = await fetch(`http://127.0.0.1:${port}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+
+    const duplicateData = await duplicateResponse.json()
+
+    assert.equal(duplicateResponse.status, 409)
+    assert.equal(duplicateData.error, 'Matrícula já cadastrada')
+  } finally {
+    server.close()
   }
 })
