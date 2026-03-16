@@ -1,6 +1,7 @@
 const { findUserByMatricula, updateUser, createUser } = require('../services/userStore')
 const { verifyPassword, hashPassword } = require('../auth/password')
 const { generateAccessToken } = require('../auth/jwt')
+const { encryptApiKey } = require('../auth/crypto')
 const { getLoginState, registerFailure, clearAttempts } = require('../services/loginAttemptService')
 const { writeAuthLog } = require('../services/authLogService')
 
@@ -76,7 +77,7 @@ const login = async (req, res) => {
 
 
 const register = async (req, res) => {
-  const { matricula, password } = req.body
+  const { matricula, password, apiKey } = req.body
 
   const existingUser = await findUserByMatricula(matricula)
 
@@ -89,6 +90,7 @@ const register = async (req, res) => {
   await createUser({
     matricula,
     password_hash: passwordHash,
+    api_key_encrypted: encryptApiKey(apiKey),
     created_at: new Date().toISOString()
   })
 
