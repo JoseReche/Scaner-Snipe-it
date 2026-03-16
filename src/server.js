@@ -265,10 +265,21 @@ const getErrorStatusCode = (error) => {
   return 500
 }
 
+const getFriendlySnipeErrorMessage = (error, fallback) => {
+  const statusCode = error.response?.status
+
+  if (statusCode === 401) {
+    return `${fallback}: API Key pessoal inválida, expirada ou sem permissão no Snipe-IT`
+  }
+
+  return null
+}
+
 const buildClientError = (error, fallback) => {
   const snipeRaw = error.response?.data?.messages || error.response?.data?.error || error.message
   const messages = normalizeSnipeMessages(snipeRaw)
-  const composedMessage = messages.length > 0 ? `${fallback}: ${messages.join('; ')}` : fallback
+  const friendlyMessage = getFriendlySnipeErrorMessage(error, fallback)
+  const composedMessage = friendlyMessage || (messages.length > 0 ? `${fallback}: ${messages.join('; ')}` : fallback)
 
   return {
     error: composedMessage,
