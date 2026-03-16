@@ -42,7 +42,7 @@ const setupLoginForm = (formId, messageId) => {
     }
 
     setJwtToken(data.token)
-    window.location.href = '/dashboard.html'
+    window.location.href = '/scanner.html'
   })
 }
 
@@ -74,5 +74,36 @@ const setupChangePasswordForm = (formId, messageId) => {
 
     setFeedback(message, 'Senha alterada com sucesso', 'success')
     form.reset()
+  })
+}
+
+
+const setupRegisterForm = (formId, messageId) => {
+  const form = document.getElementById(formId)
+  const message = document.getElementById(messageId)
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault()
+
+    const body = Object.fromEntries(new FormData(form).entries())
+    const response = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    })
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      setFeedback(message, data.error || 'Falha no cadastro', 'error')
+      return
+    }
+
+    setFeedback(message, 'Usuário criado com sucesso. Redirecionando para login...', 'success')
+    form.reset()
+
+    setTimeout(() => {
+      window.location.href = '/login.html'
+    }, 1200)
   })
 }

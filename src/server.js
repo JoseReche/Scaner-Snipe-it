@@ -6,6 +6,8 @@ const cors = require("cors")
 const { authRouter } = require("./routes/authRoutes")
 const { sipeRouter } = require("./routes/sipeRoutes")
 const { authMiddleware } = require("./middleware/authMiddleware")
+const { findUserByMatricula } = require("./services/userStore")
+const { decryptApiKey } = require("./auth/crypto")
 
 dotenv.config({ path: path.join(__dirname, "..", ".env") })
 
@@ -19,17 +21,36 @@ app.use("/api/auth", authRouter)
 app.use("/api/sipe", sipeRouter)
 
 const SNIPE_URL = process.env.SNIPE_URL || "https://SEU-SNIPE/api/v1"
-const API_KEY = process.env.SNIPE_API_KEY || "SEU_TOKEN_API"
 const PORT = process.env.PORT || 3000
 const DEFAULT_PA_FIELD_KEY = process.env.SNIPE_PA_FIELD_KEY || "_snipeit_pa_6"
 
-const headers = {
-  Authorization: `Bearer ${API_KEY}`,
+const hasValidConfig = !SNIPE_URL.includes("SEU-SNIPE")
+
+const buildHeadersFromApiKey = (apiKey) => ({
+  Authorization: `Bearer ${apiKey}`,
   Accept: "application/json",
   "Content-Type": "application/json"
-}
+})
 
-const hasValidConfig = !SNIPE_URL.includes("SEU-SNIPE") && API_KEY !== "SEU_TOKEN_API"
+const getUserHeaders = async (req) => {
+  const user = await findUserByMatricula(req.user.matricula)
+
+  if (!user) {
+    const error = new Error("Usuário autenticado não encontrado")
+    error.statusCode = 404
+    throw error
+  }
+
+  if (!user.api_key_encrypted) {
+    const error = new Error("Usuário sem API Key cadastrada")
+    error.statusCode = 400
+    throw error
+  }
+
+  const apiKey = decryptApiKey(user.api_key_encrypted)
+
+  return buildHeadersFromApiKey(apiKey)
+}
 
 const customFieldValue = (asset, fieldName) => {
   const field = asset.custom_fields?.[fieldName]
@@ -71,20 +92,20 @@ const mapAsset = (asset) => ({
   )
 })
 
-const fetchAssetById = async (id) => {
-  const response = await axios.get(`${SNIPE_URL}/hardware/${id}`, { headers })
+const fetchAssetById = async (id, requestHeaders) => {
+  const response = await axios.get(`${SNIPE_URL}/hardware/${id}`, { headers: requestHeaders })
 
   return response.data
 }
 
-const fetchPaginatedRows = async (endpoint) => {
+const fetchPaginatedRows = async (endpoint, requestHeaders) => {
   const rows = []
   let offset = 0
   const limit = 500
 
   while (true) {
     const response = await axios.get(`${SNIPE_URL}/${endpoint}`, {
-      headers,
+      headers: requestHeaders,
       params: { limit, offset }
     })
     const pageRows = Array.isArray(response.data?.rows) ? response.data.rows : []
@@ -233,10 +254,32 @@ const normalizeSnipeMessages = (raw) => {
   return [String(raw)]
 }
 
+
+const getErrorStatusCode = (error) => {
+  const statusCode = error.statusCode || error.response?.status
+
+  if (typeof statusCode === "number" && statusCode >= 400) {
+    return statusCode
+  }
+
+  return 500
+}
+
+const getFriendlySnipeErrorMessage = (error, fallback) => {
+  const statusCode = error.response?.status
+
+  if (statusCode === 401) {
+    return `${fallback}: API Key pessoal inválida, expirada ou sem permissão no Snipe-IT`
+  }
+
+  return null
+}
+
 const buildClientError = (error, fallback) => {
   const snipeRaw = error.response?.data?.messages || error.response?.data?.error || error.message
   const messages = normalizeSnipeMessages(snipeRaw)
-  const composedMessage = messages.length > 0 ? `${fallback}: ${messages.join('; ')}` : fallback
+  const friendlyMessage = getFriendlySnipeErrorMessage(error, fallback)
+  const composedMessage = friendlyMessage || (messages.length > 0 ? `${fallback}: ${messages.join('; ')}` : fallback)
 
   return {
     error: composedMessage,
@@ -245,7 +288,7 @@ const buildClientError = (error, fallback) => {
   }
 }
 
-const buildAssetPayload = async (assetId, body) => {
+const buildAssetPayload = async (assetId, body, requestHeaders) => {
   const allowedTextFields = ["notes"]
   const allowedIntegerFields = ["location_id", "rtd_location_id", "status_id", "model_id", "company_id"]
   const payload = {}
@@ -264,7 +307,7 @@ const buildAssetPayload = async (assetId, body) => {
     }
   }
 
-  const currentAsset = await fetchAssetById(assetId)
+  const currentAsset = await fetchAssetById(assetId, requestHeaders)
   const customFields = { ...(body.custom_fields || {}) }
   const customFieldMapping = mapCustomFieldLabelToKey(currentAsset)
 
@@ -297,7 +340,7 @@ app.use(authMiddleware)
 app.use((req, res, next) => {
   if (!hasValidConfig) {
     return res.status(500).json({
-      error: "Configure as variáveis SNIPE_URL e SNIPE_API_KEY no arquivo .env antes de usar a API"
+      error: "Configure a variável SNIPE_URL no arquivo .env antes de usar a API"
     })
   }
 
@@ -306,13 +349,18 @@ app.use((req, res, next) => {
 
 app.get("/asset/:id", async (req, res) => {
   try {
-    const asset = await fetchAssetById(req.params.id)
+    const requestHeaders = await getUserHeaders(req)
+    const asset = await fetchAssetById(req.params.id, requestHeaders)
 
     return res.json(mapAsset(asset))
   } catch (e) {
+    if (e.statusCode) {
+      return res.status(e.statusCode).json({ error: e.message })
+    }
+
     // Ponto de debug do endpoint de consulta de ativo.
     logApiError("GET /asset/:id", e)
-    return res.status(500).json(buildClientError(e, "Erro ao buscar ativo"))
+    return res.status(getErrorStatusCode(e)).json(buildClientError(e, "Erro ao buscar ativo"))
   }
 })
 
@@ -324,21 +372,27 @@ app.get("/move-info", async (req, res) => {
   }
 
   try {
-    const data = await fetchAssetById(asset)
+    const requestHeaders = await getUserHeaders(req)
+    const data = await fetchAssetById(asset, requestHeaders)
 
     return res.json(data)
   } catch (e) {
+    if (e.statusCode) {
+      return res.status(e.statusCode).json({ error: e.message })
+    }
+
     // Ponto de debug para entender falhas ao carregar dados de movimentação.
     logApiError("GET /move-info", e)
-    return res.status(500).json(buildClientError(e, "Erro ao buscar dados para movimentação"))
+    return res.status(getErrorStatusCode(e)).json(buildClientError(e, "Erro ao buscar dados para movimentação"))
   }
 })
 
-app.get("/options", async (_req, res) => {
+app.get("/options", async (req, res) => {
   try {
+    const requestHeaders = await getUserHeaders(req)
     const [statusRows, locationRows] = await Promise.all([
-      fetchPaginatedRows("statuslabels"),
-      fetchPaginatedRows("locations")
+      fetchPaginatedRows("statuslabels", requestHeaders),
+      fetchPaginatedRows("locations", requestHeaders)
     ])
 
     const statuses = statusRows.map((item) => ({ id: item.id, name: item.name })).filter((item) => item.id && item.name)
@@ -346,9 +400,13 @@ app.get("/options", async (_req, res) => {
 
     return res.json({ statuses, locations })
   } catch (e) {
+    if (e.statusCode) {
+      return res.status(e.statusCode).json({ error: e.message })
+    }
+
     // Ponto de debug para capturar erro de listagem de opções auxiliares.
     logApiError("GET /options", e)
-    return res.status(500).json(buildClientError(e, "Erro ao buscar listas de status e local"))
+    return res.status(getErrorStatusCode(e)).json(buildClientError(e, "Erro ao buscar listas de status e local"))
   }
 })
 
@@ -361,19 +419,25 @@ app.post("/move", async (req, res) => {
   }
 
   try {
+    const requestHeaders = await getUserHeaders(req)
+
     await axios.patch(
       `${SNIPE_URL}/hardware/${asset}`,
       {
         _snipeit_pa_6: pa
       },
-      { headers }
+      { headers: requestHeaders }
     )
 
     return res.json({ success: true })
   } catch (e) {
+    if (e.statusCode) {
+      return res.status(e.statusCode).json({ error: e.message })
+    }
+
     // Ponto de debug no fluxo de movimentação de ativo.
     logApiError("POST /move", e)
-    return res.status(500).json(buildClientError(e, "Erro ao mover ativo"))
+    return res.status(getErrorStatusCode(e)).json(buildClientError(e, "Erro ao mover ativo"))
   }
 })
 
@@ -381,8 +445,13 @@ app.patch("/asset/:id", async (req, res) => {
   let payload = {}
 
   try {
-    payload = await buildAssetPayload(req.params.id, req.body)
+    const requestHeaders = await getUserHeaders(req)
+    payload = await buildAssetPayload(req.params.id, req.body, requestHeaders)
   } catch (e) {
+    if (e.statusCode) {
+      return res.status(e.statusCode).json({ error: e.message })
+    }
+
     // Ponto de debug na etapa de montagem do payload de atualização.
     logApiError("PATCH /asset/:id [build payload]", e)
 
@@ -390,18 +459,23 @@ app.patch("/asset/:id", async (req, res) => {
       return res.status(400).json({ error: e.message })
     }
 
-    return res.status(500).json(buildClientError(e, "Erro ao identificar o campo PA"))
+    return res.status(getErrorStatusCode(e)).json(buildClientError(e, "Erro ao identificar o campo PA"))
   }
 
   try {
-    await axios.patch(`${SNIPE_URL}/hardware/${req.params.id}`, payload, { headers })
-    const updatedAsset = await fetchAssetById(req.params.id)
+    const requestHeaders = await getUserHeaders(req)
+    await axios.patch(`${SNIPE_URL}/hardware/${req.params.id}`, payload, { headers: requestHeaders })
+    const updatedAsset = await fetchAssetById(req.params.id, requestHeaders)
 
     return res.json({ success: true, asset: mapAsset(updatedAsset) })
   } catch (e) {
+    if (e.statusCode) {
+      return res.status(e.statusCode).json({ error: e.message })
+    }
+
     // Ponto de debug na atualização do ativo no Snipe-IT.
     logApiError("PATCH /asset/:id", e)
-    return res.status(500).json(buildClientError(e, "Erro ao atualizar ativo"))
+    return res.status(getErrorStatusCode(e)).json(buildClientError(e, "Erro ao atualizar ativo"))
   }
 })
 
@@ -413,19 +487,25 @@ app.post("/checkout", async (req, res) => {
   }
 
   try {
+    const requestHeaders = await getUserHeaders(req)
+
     await axios.post(
       `${SNIPE_URL}/hardware/${asset}/checkout`,
       {
         assigned_user: user
       },
-      { headers }
+      { headers: requestHeaders }
     )
 
     return res.json({ success: true })
   } catch (e) {
+    if (e.statusCode) {
+      return res.status(e.statusCode).json({ error: e.message })
+    }
+
     // Ponto de debug para problemas no checkout do ativo.
     logApiError("POST /checkout", e)
-    return res.status(500).json(buildClientError(e, "Erro no checkout"))
+    return res.status(getErrorStatusCode(e)).json(buildClientError(e, "Erro no checkout"))
   }
 })
 

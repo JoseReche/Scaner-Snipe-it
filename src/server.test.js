@@ -2,11 +2,12 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 
 process.env.SNIPE_URL = 'http://snipe.local/api/v1'
-process.env.SNIPE_API_KEY = 'token-valido'
 process.env.JWT_SECRET = 'test-secret'
+process.env.ENCRYPTION_KEY = 'encryption-key-test'
 
 const axios = require('axios')
 const { generateAccessToken } = require('./auth/jwt')
+const { decryptApiKey, encryptApiKey } = require('./auth/crypto')
 const {
   app,
   buildAssetPayload,
@@ -14,6 +15,30 @@ const {
   mapCustomFieldLabelToKey,
   findPaCustomFieldKey
 } = require('./server')
+
+
+const fs = require('fs/promises')
+const usersPath = require('path').join(__dirname, 'data', 'users.json')
+let originalUsersFile = '[]\n'
+
+test.before(async () => {
+  originalUsersFile = await fs.readFile(usersPath, 'utf8')
+
+  const users = [
+    {
+      matricula: '12345',
+      password_hash: '$2a$12$GF6lXBdL2ZG9zDM7wJRf3uK9r51PgUf8hX6HZv8vfUzqZJZXg5iAS',
+      api_key_encrypted: encryptApiKey('api-key-teste-12345'),
+      created_at: '2026-01-01T00:00:00.000Z'
+    }
+  ]
+
+  await fs.writeFile(usersPath, `${JSON.stringify(users, null, 2)}\n`, 'utf8')
+})
+
+test.after(async () => {
+  await fs.writeFile(usersPath, originalUsersFile, 'utf8')
+})
 
 const baseAsset = {
   id: 10,
@@ -188,6 +213,186 @@ test('POST /move atualiza o campo customizado _snipeit_pa_6', async () => {
     assert.equal(requests[0].payload.rtd_location_id, undefined)
   } finally {
     server.close()
+    axios.patch = originalPatch
+  }
+})
+
+test('POST /api/auth/register cria usuário e impede matrícula duplicada', async () => {
+  const server = app.listen(0)
+  const { port } = server.address()
+
+  try {
+    const uniqueMatricula = `u${Date.now()}`
+    const payload = {
+      matricula: uniqueMatricula,
+      password: 'SenhaSuperForte!2026',
+      apiKey: 'minha-chave-pessoal-123456'
+    }
+
+    const registerResponse = await fetch(`http://127.0.0.1:${port}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+
+    const registerData = await registerResponse.json()
+
+    assert.equal(registerResponse.status, 201)
+    assert.equal(registerData.success, true)
+
+    const usersAfterRegister = JSON.parse(await fs.readFile(usersPath, 'utf8'))
+    const createdUser = usersAfterRegister.find((user) => user.matricula === uniqueMatricula)
+
+    assert.ok(createdUser)
+    assert.equal(typeof createdUser.api_key_encrypted, 'string')
+    assert.equal(decryptApiKey(createdUser.api_key_encrypted), payload.apiKey)
+
+    const duplicateResponse = await fetch(`http://127.0.0.1:${port}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+
+    const duplicateData = await duplicateResponse.json()
+
+    assert.equal(duplicateResponse.status, 409)
+    assert.equal(duplicateData.error, 'Matrícula já cadastrada')
+  } finally {
+    server.close()
+  }
+})
+
+
+test('GET /asset/:id propaga 401 quando API key do usuário é rejeitada pelo Snipe-IT', async () => {
+  const originalGet = axios.get
+
+  axios.get = async () => {
+    const error = new Error('Unauthorized or unauthenticated.')
+    error.response = {
+      status: 401,
+      statusText: 'Unauthorized',
+      data: { error: 'Unauthorized or unauthenticated.' }
+    }
+    error.config = {
+      method: 'get',
+      url: 'https://snipe.schulze.com.br/api/v1/hardware/1'
+    }
+    throw error
+  }
+
+  const server = app.listen(0)
+  const { port } = server.address()
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/asset/1`, { headers: authHeader() })
+    const data = await response.json()
+
+    assert.equal(response.status, 401)
+    assert.match(data.error, /Erro ao buscar ativo/)
+    assert.match(data.error, /API Key pessoal inválida, expirada ou sem permissão no Snipe-IT/)
+  } finally {
+    server.close()
+    axios.get = originalGet
+  }
+})
+
+
+test('GET /options propaga 401 com mensagem amigável quando a API key do usuário é inválida', async () => {
+  const originalGet = axios.get
+
+  axios.get = async () => {
+    const error = new Error('Unauthorized or unauthenticated.')
+    error.response = {
+      status: 401,
+      statusText: 'Unauthorized',
+      data: { error: 'Unauthorized or unauthenticated.' }
+    }
+    error.config = {
+      method: 'get',
+      url: 'https://snipe.schulze.com.br/api/v1/statuslabels'
+    }
+    throw error
+  }
+
+  const server = app.listen(0)
+  const { port } = server.address()
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/options`, { headers: authHeader() })
+    const data = await response.json()
+
+    assert.equal(response.status, 401)
+    assert.match(data.error, /Erro ao buscar listas de status e local/)
+    assert.match(data.error, /API Key pessoal inválida, expirada ou sem permissão no Snipe-IT/)
+  } finally {
+    server.close()
+    axios.get = originalGet
+  }
+})
+
+
+test('POST /api/auth/register e POST /api/auth/login não consultam API do Snipe-IT', async () => {
+  const originalGet = axios.get
+  const originalPost = axios.post
+  const originalPatch = axios.patch
+
+  let externalCalls = 0
+
+  axios.get = async () => {
+    externalCalls += 1
+    throw new Error('Não deveria chamar Snipe no login/cadastro')
+  }
+
+  axios.post = async () => {
+    externalCalls += 1
+    throw new Error('Não deveria chamar Snipe no login/cadastro')
+  }
+
+  axios.patch = async () => {
+    externalCalls += 1
+    throw new Error('Não deveria chamar Snipe no login/cadastro')
+  }
+
+  const server = app.listen(0)
+  const { port } = server.address()
+
+  try {
+    const matricula = `u${Date.now()}`
+    const registerPayload = {
+      matricula,
+      password: 'SenhaSuperForte!2026',
+      apiKey: 'api-key-do-usuario-123456'
+    }
+
+    const registerResponse = await fetch(`http://127.0.0.1:${port}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(registerPayload)
+    })
+
+    const registerData = await registerResponse.json()
+
+    assert.equal(registerResponse.status, 201)
+    assert.equal(registerData.success, true)
+
+    const loginResponse = await fetch(`http://127.0.0.1:${port}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        matricula,
+        password: registerPayload.password
+      })
+    })
+
+    const loginData = await loginResponse.json()
+
+    assert.equal(loginResponse.status, 200)
+    assert.equal(typeof loginData.token, 'string')
+    assert.equal(externalCalls, 0)
+  } finally {
+    server.close()
+    axios.get = originalGet
+    axios.post = originalPost
     axios.patch = originalPatch
   }
 })
