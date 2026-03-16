@@ -262,3 +262,37 @@ test('POST /api/auth/register cria usuário e impede matrícula duplicada', asyn
     server.close()
   }
 })
+
+
+test('GET /asset/:id propaga 401 quando API key do usuário é rejeitada pelo Snipe-IT', async () => {
+  const originalGet = axios.get
+
+  axios.get = async () => {
+    const error = new Error('Unauthorized or unauthenticated.')
+    error.response = {
+      status: 401,
+      statusText: 'Unauthorized',
+      data: { error: 'Unauthorized or unauthenticated.' }
+    }
+    error.config = {
+      method: 'get',
+      url: 'https://snipe.schulze.com.br/api/v1/hardware/1'
+    }
+    throw error
+  }
+
+  const server = app.listen(0)
+  const { port } = server.address()
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/asset/1`, { headers: authHeader() })
+    const data = await response.json()
+
+    assert.equal(response.status, 401)
+    assert.match(data.error, /Erro ao buscar ativo/)
+    assert.match(data.error, /Unauthorized or unauthenticated/)
+  } finally {
+    server.close()
+    axios.get = originalGet
+  }
+})

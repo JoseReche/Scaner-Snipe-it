@@ -254,6 +254,17 @@ const normalizeSnipeMessages = (raw) => {
   return [String(raw)]
 }
 
+
+const getErrorStatusCode = (error) => {
+  const statusCode = error.statusCode || error.response?.status
+
+  if (typeof statusCode === "number" && statusCode >= 400) {
+    return statusCode
+  }
+
+  return 500
+}
+
 const buildClientError = (error, fallback) => {
   const snipeRaw = error.response?.data?.messages || error.response?.data?.error || error.message
   const messages = normalizeSnipeMessages(snipeRaw)
@@ -338,7 +349,7 @@ app.get("/asset/:id", async (req, res) => {
 
     // Ponto de debug do endpoint de consulta de ativo.
     logApiError("GET /asset/:id", e)
-    return res.status(500).json(buildClientError(e, "Erro ao buscar ativo"))
+    return res.status(getErrorStatusCode(e)).json(buildClientError(e, "Erro ao buscar ativo"))
   }
 })
 
@@ -361,7 +372,7 @@ app.get("/move-info", async (req, res) => {
 
     // Ponto de debug para entender falhas ao carregar dados de movimentação.
     logApiError("GET /move-info", e)
-    return res.status(500).json(buildClientError(e, "Erro ao buscar dados para movimentação"))
+    return res.status(getErrorStatusCode(e)).json(buildClientError(e, "Erro ao buscar dados para movimentação"))
   }
 })
 
@@ -384,7 +395,7 @@ app.get("/options", async (req, res) => {
 
     // Ponto de debug para capturar erro de listagem de opções auxiliares.
     logApiError("GET /options", e)
-    return res.status(500).json(buildClientError(e, "Erro ao buscar listas de status e local"))
+    return res.status(getErrorStatusCode(e)).json(buildClientError(e, "Erro ao buscar listas de status e local"))
   }
 })
 
@@ -415,7 +426,7 @@ app.post("/move", async (req, res) => {
 
     // Ponto de debug no fluxo de movimentação de ativo.
     logApiError("POST /move", e)
-    return res.status(500).json(buildClientError(e, "Erro ao mover ativo"))
+    return res.status(getErrorStatusCode(e)).json(buildClientError(e, "Erro ao mover ativo"))
   }
 })
 
@@ -437,7 +448,7 @@ app.patch("/asset/:id", async (req, res) => {
       return res.status(400).json({ error: e.message })
     }
 
-    return res.status(500).json(buildClientError(e, "Erro ao identificar o campo PA"))
+    return res.status(getErrorStatusCode(e)).json(buildClientError(e, "Erro ao identificar o campo PA"))
   }
 
   try {
@@ -453,7 +464,7 @@ app.patch("/asset/:id", async (req, res) => {
 
     // Ponto de debug na atualização do ativo no Snipe-IT.
     logApiError("PATCH /asset/:id", e)
-    return res.status(500).json(buildClientError(e, "Erro ao atualizar ativo"))
+    return res.status(getErrorStatusCode(e)).json(buildClientError(e, "Erro ao atualizar ativo"))
   }
 })
 
@@ -483,7 +494,7 @@ app.post("/checkout", async (req, res) => {
 
     // Ponto de debug para problemas no checkout do ativo.
     logApiError("POST /checkout", e)
-    return res.status(500).json(buildClientError(e, "Erro no checkout"))
+    return res.status(getErrorStatusCode(e)).json(buildClientError(e, "Erro no checkout"))
   }
 })
 
