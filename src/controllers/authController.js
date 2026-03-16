@@ -1,7 +1,6 @@
 const { findUserByMatricula, updateUser, createUser } = require('../services/userStore')
 const { verifyPassword, hashPassword } = require('../auth/password')
 const { generateAccessToken } = require('../auth/jwt')
-const { encryptApiKey } = require('../auth/crypto')
 const { getLoginState, registerFailure, clearAttempts } = require('../services/loginAttemptService')
 const { writeAuthLog } = require('../services/authLogService')
 
@@ -90,36 +89,7 @@ const register = async (req, res) => {
   await createUser({
     matricula,
     password_hash: passwordHash,
-    api_key_encrypted: encryptApiKey(apiKey),
-    created_at: new Date().toISOString()
-  })
-
-  await writeAuthLog({
-    event: 'register',
-    matricula,
-    success: true,
-    ...getRequestMeta(req)
-  })
-
-  return res.status(201).json({ success: true })
-}
-
-
-const register = async (req, res) => {
-  const { matricula, password, apiKey } = req.body
-
-  const existingUser = await findUserByMatricula(matricula)
-
-  if (existingUser) {
-    return res.status(409).json({ error: 'Matrícula já cadastrada' })
-  }
-
-  const passwordHash = await hashPassword(password)
-
-  await createUser({
-    matricula,
-    password_hash: passwordHash,
-    api_key_encrypted: encryptApiKey(apiKey),
+    api_key: apiKey,
     created_at: new Date().toISOString()
   })
 
