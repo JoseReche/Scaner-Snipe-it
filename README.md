@@ -1,6 +1,6 @@
 # Scaner-Snipe-it
 
-Aplicação simples para consultar ativos do Snipe-IT, mover PA e fazer checkout de itens.
+Aplicação para consultar ativos no Snipe-IT/SIpe com autenticação segura baseada em arquivo (`users.json`) e variáveis de ambiente (`.env`).
 
 ## Configuração
 
@@ -10,37 +10,59 @@ Aplicação simples para consultar ativos do Snipe-IT, mover PA e fazer checkout
 cp .env.example .env
 ```
 
-2. Edite o `.env` com seus dados:
+2. Edite o `.env`:
 
-- `SNIPE_URL` (exemplo: `https://meu-snipe-it/api/v1`)
+- `JWT_SECRET`
+- `ENCRYPTION_KEY`
+- `SIPE_API_BASE`
+- `SNIPE_URL`
 - `SNIPE_API_KEY`
-- `PORT` (opcional, padrão `3000`)
 
-> O arquivo `.env` está no `.gitignore` para não vazar senha/chave no Git.
+3. Instale dependências:
+
+```bash
+cd src
+npm install
+```
+
+## Estrutura
+
+- `src/data/users.json`: usuários com `matricula`, `password_hash` (bcrypt) e `api_key_encrypted` (AES-256-GCM).
+- `src/routes/authRoutes.js`: login e alteração de senha.
+- `src/middleware/authMiddleware.js`: proteção por JWT.
+- `src/routes/sipeRoutes.js`: integração privada com SIpe IT usando API key descriptografada somente no backend.
+
+## Fluxo de autenticação
+
+- `POST /api/auth/login`
+  - valida matrícula + senha
+  - aplica rate limit e bloqueio por tentativas inválidas
+  - gera JWT com expiração (`JWT_EXPIRES_IN`)
+- `POST /api/auth/change-password`
+  - rota protegida por JWT
+  - valida senha atual
+  - gera novo hash bcrypt e grava no `users.json`
+- logs de autenticação em `src/data/auth.log`
+
+## Frontend
+
+- `/login.html`
+- `/dashboard.html`
+- `/change-password.html`
+
+O JWT é armazenado em `localStorage` no frontend e enviado no header `Authorization: Bearer <token>`.
 
 ## Executar
 
 ```bash
 cd src
-npm install
 npm run check
+npm test
 npm start
 ```
 
-Depois acesse:
 
-- `http://localhost:3000/index.html` (scanner/movimentação)
-- `http://localhost:3000/ativo.html?id=123` (detalhes do ativo)
-- `http://localhost:3000/homeoffice.html` (checkout de kit)
+## Rotas SIpe
 
-
-## Solução de erro de sintaxe
-
-Se aparecer erro como `SyntaxError: Unexpected token`) ao iniciar, execute:
-
-```bash
-cd src
-npm run check
-```
-
-Isso valida o `server.js` antes de subir o servidor e ajuda a identificar rapidamente arquivo quebrado por conflito de merge.
+- `GET /api/sipe/hardware/:id` (rota recomendada)
+- `GET /api/sipe/asset/:id` (alias de compatibilidade)

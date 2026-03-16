@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Dashboard</title>
+    <link rel="stylesheet" href="/auth.css" />
+  </head>
+  <body>
+    <div class="container">
+      <div class="topbar">
+        <h3>Dashboard Privado</h3>
+        <a href="/index.html">Ir para Scanner</a>
+      </div>
+
+      <div class="grid">
+        <section class="card">
+          <h2>Consulta SIpe IT</h2>
+          <p class="small">Esta consulta usa a API Key do usuário descriptografada apenas no backend.</p>
+
+          <label for="asset-id">ID do ativo</label>
+          <input id="asset-id" type="number" value="1" min="1" />
+
+          <div class="actions">
+            <button id="load-asset">Buscar ativo</button>
+            <button id="change-password" class="secondary">Alterar senha</button>
+            <button id="logout" class="secondary">Sair</button>
+          </div>
+
+          <p id="message" class="message" aria-live="polite"></p>
+        </section>
+
+        <section class="card">
+          <h2>Resultado</h2>
+          <pre id="output">Nenhuma consulta executada.</pre>
+        </section>
+      </div>
+    </div>
+
+    <script src="/js/auth.js"></script>
+    <script>
+      requireAuthToken()
+
+      const message = document.getElementById('message')
+      const output = document.getElementById('output')
+
+      document.getElementById('load-asset').addEventListener('click', async () => {
+        const id = document.getElementById('asset-id').value
+
+        message.textContent = ''
+        message.className = 'message'
+
+        try {
+          const response = await fetch(`/api/sipe/hardware/${id}`, {
+            headers: {
+              Authorization: `Bearer ${getJwtToken()}`
+            }
+          })
+          const data = await response.json()
+
+          if (!response.ok) {
+            message.textContent = data.error || 'Falha ao consultar ativo'
+            message.classList.add('error')
+            output.textContent = JSON.stringify(data, null, 2)
+            return
+          }
+
+          message.textContent = 'Consulta realizada com sucesso'
+          message.classList.add('success')
+          output.textContent = JSON.stringify(data, null, 2)
+        } catch (error) {
+          message.textContent = error.message
+          message.classList.add('error')
+          output.textContent = error.message
+        }
+      })
+
+      document.getElementById('change-password').addEventListener('click', () => {
+        window.location.href = '/change-password.html'
+      })
+
+      document.getElementById('logout').addEventListener('click', () => {
+        clearJwtToken()
+        window.location.href = '/login.html'
+      })
+    </script>
+  </body>
+</html>
