@@ -1,6 +1,6 @@
 # Scaner-Snipe-it
 
-Aplicação para consultar ativos no Snipe-IT/SIpe com autenticação segura baseada em arquivo (`users.json`) e variáveis de ambiente (`.env`), usando API Key pessoal de cada usuário.
+Aplicação para consultar ativos no Snipe-IT/SIpe com autenticação segura baseada em banco local SQLite (`users.sqlite`) e variáveis de ambiente (`.env`), usando API Key pessoal de cada usuário criptografada no backend.
 
 ## Configuração
 
@@ -25,7 +25,7 @@ npm install
 
 ## Estrutura
 
-- `src/data/users.json`: usuários com `matricula`, `password_hash` (bcrypt) e `api_key` (token pessoal da API).
+- `src/data/users.sqlite`: banco local SQLite com `matricula`, `password_hash` (bcrypt) e `api_key_encrypted` (AES-256-GCM).
 - `src/routes/authRoutes.js`: login e alteração de senha.
 - `src/middleware/authMiddleware.js`: proteção por JWT.
 - `src/routes/sipeRoutes.js`: integração privada com SIpe IT usando API key pessoal do usuário no backend.
@@ -39,13 +39,22 @@ npm install
 - `POST /api/auth/register`
   - cria usuário novo com matrícula única
   - valida senha forte no backend
-  - recebe a chave pessoal da API e persiste no `users.json`
-  - persiste hash bcrypt no `users.json`
+  - recebe a chave pessoal da API, criptografa no backend e persiste no SQLite (`users.sqlite`)
+  - persiste hash bcrypt no SQLite (`users.sqlite`)
 - `POST /api/auth/change-password`
   - rota protegida por JWT
   - valida senha atual
-  - gera novo hash bcrypt e grava no `users.json`
+  - gera novo hash bcrypt e grava no SQLite (`users.sqlite`)
 - logs de autenticação em `src/data/auth.log`
+
+
+## Segurança
+
+- API token nunca é salvo em texto puro: é criptografado com AES-256-GCM + chave derivada via scrypt (com salt aleatório por registro).
+- Senhas são armazenadas apenas como hash bcrypt.
+- O serviço lê/salva apenas os campos mínimos do usuário (`matricula`, `password_hash`, `api_key_encrypted`).
+- O armazenamento de usuários é exclusivamente em SQLite (`users.sqlite`), sem persistência em JSON.
+- `ENCRYPTION_KEY` precisa ter no mínimo 16 caracteres (recomendado 32+).
 
 ## Frontend
 

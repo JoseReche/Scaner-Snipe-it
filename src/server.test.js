@@ -6,6 +6,17 @@ process.env.JWT_SECRET = 'test-secret'
 process.env.ENCRYPTION_KEY = 'encryption-key-test'
 
 const axios = require('axios')
+
+const crypto = require('crypto')
+
+const encryptLegacyV1ForTest = (plainText) => {
+  const key = crypto.createHash('sha256').update(process.env.ENCRYPTION_KEY, 'utf8').digest()
+  const iv = crypto.randomBytes(12)
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv)
+  const encrypted = Buffer.concat([cipher.update(plainText, 'utf8'), cipher.final()])
+  const tag = cipher.getAuthTag()
+  return `${iv.toString('hex')}:${tag.toString('hex')}:${encrypted.toString('hex')}`
+}
 const { generateAccessToken } = require('./auth/jwt')
 const {
   app,
@@ -16,27 +27,40 @@ const {
 } = require('./server')
 
 
-const fs = require('fs/promises')
-const usersPath = require('path').join(__dirname, 'data', 'users.json')
-let originalUsersFile = '[]\n'
+const { readUsers, writeUsers } = require('./services/userStore')
+const { encryptApiKey, decryptApiKey } = require('./auth/crypto')
+let originalUsers = []
 
 test.before(async () => {
-  originalUsersFile = await fs.readFile(usersPath, 'utf8')
+  originalUsers = await readUsers()
 
-  const users = [
+  await writeUsers([
     {
       matricula: '12345',
       password_hash: '$2a$12$GF6lXBdL2ZG9zDM7wJRf3uK9r51PgUf8hX6HZv8vfUzqZJZXg5iAS',
-      api_key: 'api-key-teste-12345',
-      created_at: '2026-01-01T00:00:00.000Z'
+      api_key_encrypted: encryptApiKey('api-key-teste-12345')
     }
-  ]
-
-  await fs.writeFile(usersPath, `${JSON.stringify(users, null, 2)}\n`, 'utf8')
+  ])
 })
 
 test.after(async () => {
-  await fs.writeFile(usersPath, originalUsersFile, 'utf8')
+  await writeUsers(originalUsers)
+})
+
+
+test('encryptApiKey usa payload versionado com salt e mantém round-trip', () => {
+  const input = 'api-key-segredo-123'
+  const encryptedA = encryptApiKey(input)
+  const encryptedB = encryptApiKey(input)
+
+  assert.match(encryptedA, /^v2:[0-9a-f]+:[0-9a-f]+:[0-9a-f]+:[0-9a-f]+$/)
+  assert.notEqual(encryptedA, encryptedB)
+  assert.equal(decryptApiKey(encryptedA), input)
+})
+
+test('decryptApiKey mantém compatibilidade com payload legado v1', () => {
+  const legacyEncrypted = encryptLegacyV1ForTest('api-key-legado')
+  assert.equal(decryptApiKey(legacyEncrypted), 'api-key-legado')
 })
 
 const baseAsset = {
@@ -317,11 +341,12 @@ test('POST /api/auth/register cria usuário e impede matrícula duplicada', asyn
     assert.equal(registerResponse.status, 201)
     assert.equal(registerData.success, true)
 
-    const usersAfterRegister = JSON.parse(await fs.readFile(usersPath, 'utf8'))
+    const usersAfterRegister = await readUsers()
     const createdUser = usersAfterRegister.find((user) => user.matricula === uniqueMatricula)
 
     assert.ok(createdUser)
-    assert.equal(createdUser.api_key, payload.apiKey)
+    assert.notEqual(createdUser.api_key_encrypted, payload.apiKey)
+    assert.equal(decryptApiKey(createdUser.api_key_encrypted), payload.apiKey)
 
     const duplicateResponse = await fetch(`http://127.0.0.1:${port}/api/auth/register`, {
       method: 'POST',

@@ -13,6 +13,7 @@ dotenv.config({ path: path.join(__dirname, "..", ".env") })
 
 const app = express()
 
+app.disable("x-powered-by")
 app.use(cors())
 app.use(express.json())
 
@@ -66,12 +67,6 @@ const getUserHeaders = async (req) => {
     const error = new Error("Usuário autenticado não encontrado")
     error.statusCode = 404
     throw error
-  }
-
-  const apiKey = user.api_key
-
-  if (apiKey) {
-    return buildHeadersFromApiKey(apiKey)
   }
 
   if (user.api_key_encrypted) {

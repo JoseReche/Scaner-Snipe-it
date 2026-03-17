@@ -3,6 +3,7 @@ const { verifyPassword, hashPassword } = require('../auth/password')
 const { generateAccessToken } = require('../auth/jwt')
 const { getLoginState, registerFailure, clearAttempts } = require('../services/loginAttemptService')
 const { writeAuthLog } = require('../services/authLogService')
+const { encryptApiKey } = require('../auth/crypto')
 
 const getRequestMeta = (req) => ({
   ip: req.ip,
@@ -11,12 +12,13 @@ const getRequestMeta = (req) => ({
 
 const login = async (req, res) => {
   const { matricula, password } = req.body
-  const state = getLoginState(matricula)
+  const normalizedMatricula = matricula.trim()
+  const state = getLoginState(normalizedMatricula)
 
   if (state.locked) {
     await writeAuthLog({
       event: 'login',
-      matricula,
+      matricula: normalizedMatricula,
       success: false,
       reason: 'Matrícula bloqueada por excesso de tentativas',
       ...getRequestMeta(req)
@@ -28,13 +30,13 @@ const login = async (req, res) => {
     })
   }
 
-  const user = await findUserByMatricula(matricula)
+  const user = await findUserByMatricula(normalizedMatricula)
 
   if (!user) {
-    registerFailure(matricula)
+    registerFailure(normalizedMatricula)
     await writeAuthLog({
       event: 'login',
-      matricula,
+      matricula: normalizedMatricula,
       success: false,
       reason: 'Matrícula inexistente',
       ...getRequestMeta(req)
@@ -46,10 +48,10 @@ const login = async (req, res) => {
   const validPassword = await verifyPassword(password, user.password_hash)
 
   if (!validPassword) {
-    registerFailure(matricula)
+    registerFailure(normalizedMatricula)
     await writeAuthLog({
       event: 'login',
-      matricula,
+      matricula: normalizedMatricula,
       success: false,
       reason: 'Senha inválida',
       ...getRequestMeta(req)
@@ -58,7 +60,7 @@ const login = async (req, res) => {
     return res.status(401).json({ error: 'Credenciais inválidas' })
   }
 
-  clearAttempts(matricula)
+  clearAttempts(normalizedMatricula)
 
   const token = generateAccessToken({
     matricula: user.matricula
@@ -66,7 +68,7 @@ const login = async (req, res) => {
 
   await writeAuthLog({
     event: 'login',
-    matricula,
+    matricula: normalizedMatricula,
     success: true,
     ...getRequestMeta(req)
   })
@@ -74,11 +76,11 @@ const login = async (req, res) => {
   return res.json({ token, expiresIn: process.env.JWT_EXPIRES_IN || '3h' })
 }
 
-
 const register = async (req, res) => {
   const { matricula, password, apiKey } = req.body
+  const normalizedMatricula = matricula.trim()
 
-  const existingUser = await findUserByMatricula(matricula)
+  const existingUser = await findUserByMatricula(normalizedMatricula)
 
   if (existingUser) {
     return res.status(409).json({ error: 'Matrícula já cadastrada' })
@@ -87,15 +89,14 @@ const register = async (req, res) => {
   const passwordHash = await hashPassword(password)
 
   await createUser({
-    matricula,
+    matricula: normalizedMatricula,
     password_hash: passwordHash,
-    api_key: apiKey,
-    created_at: new Date().toISOString()
+    api_key_encrypted: encryptApiKey(apiKey)
   })
 
   await writeAuthLog({
     event: 'register',
-    matricula,
+    matricula: normalizedMatricula,
     success: true,
     ...getRequestMeta(req)
   })
@@ -131,8 +132,7 @@ const changePassword = async (req, res) => {
 
   await updateUser(matricula, (current) => ({
     ...current,
-    password_hash: newHash,
-    updated_at: new Date().toISOString()
+    password_hash: newHash
   }))
 
   await writeAuthLog({
