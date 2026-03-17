@@ -15,7 +15,34 @@ const app = express()
 
 app.use(cors())
 app.use(express.json())
-app.use(express.static(path.join(__dirname, "public")))
+
+const publicDir = path.join(__dirname, "public")
+
+const htmlRoutes = {
+  "/": "login.html",
+  "/login": "login.html",
+  "/scanner": "scanner.html",
+  "/scanner-pa": "scanner-pa.html",
+  "/usuario": "usuario.html",
+  "/dashboard": "dashboard.html",
+  "/register": "register.html",
+  "/change-password": "change-password.html",
+  "/home-office": "home-office.html"
+}
+
+for (const [routePath, fileName] of Object.entries(htmlRoutes)) {
+  app.get(routePath, (req, res) => {
+    res.sendFile(path.join(publicDir, fileName))
+  })
+
+  if (routePath !== "/") {
+    app.get(`${routePath}.html`, (req, res) => {
+      res.redirect(301, routePath)
+    })
+  }
+}
+
+app.use(express.static(publicDir))
 
 app.use("/api/auth", authRouter)
 app.use("/api/sipe", sipeRouter)
@@ -79,7 +106,10 @@ const mapAsset = (asset) => ({
   status: asset.status_label?.name || null,
   statusId: asset.status_label?.id || null,
   company: asset.company?.name || null,
+  companyId: asset.company?.id || null,
   manufacturer: asset.manufacturer?.name || null,
+  assignedTo: asset.assigned_to?.name || null,
+  assignedToId: asset.assigned_to?.id || null,
   location: asset.location?.name || null,
   locationId: asset.location?.id || null,
   rtdLocation: asset.rtd_location?.name || null,
@@ -294,7 +324,7 @@ const buildClientError = (error, fallback) => {
 
 const buildAssetPayload = async (assetId, body, requestHeaders) => {
   const allowedTextFields = ["notes"]
-  const allowedIntegerFields = ["location_id", "rtd_location_id", "status_id", "model_id", "company_id"]
+  const allowedIntegerFields = ["location_id", "rtd_location_id", "status_id", "model_id", "company_id", "assigned_to"]
   const payload = {}
 
   for (const field of allowedTextFields) {
@@ -394,15 +424,21 @@ app.get("/move-info", async (req, res) => {
 app.get("/options", async (req, res) => {
   try {
     const requestHeaders = await getUserHeaders(req)
-    const [statusRows, locationRows] = await Promise.all([
+    const [statusRows, locationRows, companyRows, userRows] = await Promise.all([
       fetchPaginatedRows("statuslabels", requestHeaders),
-      fetchPaginatedRows("locations", requestHeaders)
+      fetchPaginatedRows("locations", requestHeaders),
+      fetchPaginatedRows("companies", requestHeaders),
+      fetchPaginatedRows("users", requestHeaders)
     ])
 
     const statuses = statusRows.map((item) => ({ id: item.id, name: item.name })).filter((item) => item.id && item.name)
     const locations = locationRows.map((item) => ({ id: item.id, name: item.name })).filter((item) => item.id && item.name)
+    const companies = companyRows.map((item) => ({ id: item.id, name: item.name })).filter((item) => item.id && item.name)
+    const users = userRows
+      .map((item) => ({ id: item.id, name: item.name || item.username || item.email }))
+      .filter((item) => item.id && item.name)
 
-    return res.json({ statuses, locations })
+    return res.json({ statuses, locations, companies, users })
   } catch (e) {
     if (e.statusCode) {
       return res.status(e.statusCode).json({ error: e.message })
@@ -480,6 +516,51 @@ app.patch("/asset/:id", async (req, res) => {
     // Ponto de debug na atualização do ativo no Snipe-IT.
     logApiError("PATCH /asset/:id", e)
     return res.status(getErrorStatusCode(e)).json(buildClientError(e, "Erro ao atualizar ativo"))
+  }
+})
+
+
+app.post("/home-office/baixa", async (req, res) => {
+  const { asset, status_id: statusId, notes, do_checkin: doCheckin } = req.body
+
+  if (asset === undefined || asset === null || asset === "" || statusId === undefined || statusId === null || statusId === "") {
+    return res.status(400).json({ error: "Campos asset e status_id são obrigatórios" })
+  }
+
+  const parsedAsset = parseIntegerField(asset)
+  const parsedStatusId = parseIntegerField(statusId)
+
+  if (parsedAsset === undefined || parsedStatusId === undefined) {
+    return res.status(400).json({ error: "asset e status_id devem ser números válidos" })
+  }
+
+  const payload = {
+    status_id: parsedStatusId
+  }
+
+  if (notes !== undefined) {
+    payload.notes = String(notes)
+  }
+
+  try {
+    const requestHeaders = await getUserHeaders(req)
+
+    if (doCheckin) {
+      await axios.post(`${SNIPE_URL}/hardware/${parsedAsset}/checkin`, {}, { headers: requestHeaders })
+    }
+
+    await axios.patch(`${SNIPE_URL}/hardware/${parsedAsset}`, payload, { headers: requestHeaders })
+
+    const updatedAsset = await fetchAssetById(parsedAsset, requestHeaders)
+
+    return res.json({ success: true, asset: mapAsset(updatedAsset) })
+  } catch (e) {
+    if (e.statusCode) {
+      return res.status(e.statusCode).json({ error: e.message })
+    }
+
+    logApiError("POST /home-office/baixa", e)
+    return res.status(getErrorStatusCode(e)).json(buildClientError(e, "Erro ao realizar baixa do kit home office"))
   }
 })
 

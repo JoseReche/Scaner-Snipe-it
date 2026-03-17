@@ -116,6 +116,24 @@ test('buildAssetPayload usa db_column quando o custom field não expõe a propri
   axios.get = originalGet
 })
 
+
+
+test('buildAssetPayload inclui company_id e assigned_to como inteiros', async () => {
+  const originalGet = axios.get
+
+  axios.get = async () => ({ data: baseAsset })
+
+  const payload = await buildAssetPayload(10, {
+    company_id: '11',
+    assigned_to: '22'
+  })
+
+  assert.equal(payload.company_id, 11)
+  assert.equal(payload.assigned_to, 22)
+
+  axios.get = originalGet
+})
+
 test('PATCH /asset/:id aplica atualização e devolve ativo mapeado', async () => {
   const originalGet = axios.get
   const originalPatch = axios.patch
@@ -216,6 +234,66 @@ test('POST /move atualiza o campo customizado _snipeit_pa_6', async () => {
   }
 })
 
+
+
+test('POST /home-office/baixa realiza checkin opcional e atualiza status do ativo', async () => {
+  const originalGet = axios.get
+  const originalPost = axios.post
+  const originalPatch = axios.patch
+
+  const calls = []
+
+  axios.post = async (url, payload) => {
+    calls.push({ method: 'post', url, payload })
+    return { data: { status: 'success' } }
+  }
+
+  axios.patch = async (url, payload) => {
+    calls.push({ method: 'patch', url, payload })
+    return { data: { status: 'success' } }
+  }
+
+  axios.get = async (url) => {
+    if (url.endsWith('/hardware/10')) {
+      return { data: baseAsset }
+    }
+
+    throw new Error(`URL inesperada no GET: ${url}`)
+  }
+
+  const server = app.listen(0)
+  const { port } = server.address()
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/home-office/baixa`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeader() },
+      body: JSON.stringify({
+        asset: 10,
+        status_id: '8',
+        notes: 'Baixa de kit home office',
+        do_checkin: true
+      })
+    })
+
+    const data = await response.json()
+
+    assert.equal(response.status, 200)
+    assert.equal(data.success, true)
+    assert.equal(calls.length, 2)
+    assert.equal(calls[0].method, 'post')
+    assert.match(calls[0].url, /\/hardware\/10\/checkin$/)
+    assert.equal(calls[1].method, 'patch')
+    assert.match(calls[1].url, /\/hardware\/10$/)
+    assert.equal(calls[1].payload.status_id, 8)
+    assert.equal(calls[1].payload.notes, 'Baixa de kit home office')
+  } finally {
+    server.close()
+    axios.get = originalGet
+    axios.post = originalPost
+    axios.patch = originalPatch
+  }
+})
 test('POST /api/auth/register cria usuário e impede matrícula duplicada', async () => {
   const server = app.listen(0)
   const { port } = server.address()
@@ -420,5 +498,66 @@ test('POST /api/auth/register e POST /api/auth/login não consultam API do Snipe
     axios.get = originalGet
     axios.post = originalPost
     axios.patch = originalPatch
+  }
+})
+
+
+test('GET /options retorna status, locais, empresas e usuários', async () => {
+  const originalGet = axios.get
+
+  axios.get = async (url) => {
+    if (url.endsWith('/statuslabels')) {
+      return { data: { rows: [{ id: 1, name: 'Ativo' }] } }
+    }
+
+    if (url.endsWith('/locations')) {
+      return { data: { rows: [{ id: 2, name: 'Matriz' }] } }
+    }
+
+    if (url.endsWith('/companies')) {
+      return { data: { rows: [{ id: 3, name: 'Empresa A' }] } }
+    }
+
+    if (url.endsWith('/users')) {
+      return { data: { rows: [{ id: 4, name: 'Usuário A' }] } }
+    }
+
+    throw new Error(`URL inesperada no GET: ${url}`)
+  }
+
+  const server = app.listen(0)
+  const { port } = server.address()
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/options`, { headers: authHeader() })
+    const data = await response.json()
+
+    assert.equal(response.status, 200)
+    assert.deepEqual(data.statuses, [{ id: 1, name: 'Ativo' }])
+    assert.deepEqual(data.locations, [{ id: 2, name: 'Matriz' }])
+    assert.deepEqual(data.companies, [{ id: 3, name: 'Empresa A' }])
+    assert.deepEqual(data.users, [{ id: 4, name: 'Usuário A' }])
+  } finally {
+    server.close()
+    axios.get = originalGet
+  }
+})
+
+
+test('Rotas públicas usam URLs limpas e redirecionam .html', async () => {
+  const server = app.listen(0)
+  const { port } = server.address()
+
+  try {
+    const cleanResponse = await fetch(`http://127.0.0.1:${port}/scanner`)
+    assert.equal(cleanResponse.status, 200)
+    const cleanHtml = await cleanResponse.text()
+    assert.match(cleanHtml, /Scanner de Ativos/)
+
+    const legacyResponse = await fetch(`http://127.0.0.1:${port}/scanner.html`, { redirect: 'manual' })
+    assert.equal(legacyResponse.status, 301)
+    assert.equal(legacyResponse.headers.get('location'), '/scanner')
+  } finally {
+    server.close()
   }
 })
