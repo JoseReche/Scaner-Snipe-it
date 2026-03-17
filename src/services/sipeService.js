@@ -22,7 +22,21 @@ const fetchAssetByIdWithUserKey = async (id, apiKey) => {
   return response.data
 }
 
+const searchAssetsByNameWithUserKey = async (name, apiKey) => {
+  const url = `${getSipeBaseUrl()}/hardware`
+  const response = await axios.get(url, {
+    headers: buildSipeHeaders(apiKey),
+    params: {
+      search: name,
+      limit: 50
+    }
+  })
+
+  return response.data
+}
+
 module.exports = {
   fetchAssetByIdWithUserKey,
+  searchAssetsByNameWithUserKey,
   getSipeBaseUrl
 }

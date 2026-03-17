@@ -25,8 +25,8 @@
       <div class="grid single-column">
         <section class="card">
           <h2>Consulta de ativo</h2>
-          <label for="asset-id">ID do ativo</label>
-          <input id="asset-id" type="number" value="1" min="1" />
+          <label for="machine-name">Nome da máquina</label>
+          <input id="machine-name" type="text" placeholder="Ex.: NOTEBOOK-2170" />
 
           <button id="load-asset">Consultar</button>
 
@@ -62,13 +62,20 @@
       })
 
       document.getElementById('load-asset').addEventListener('click', async () => {
-        const id = document.getElementById('asset-id').value
+        const machineName = document.getElementById('machine-name').value.trim()
+
+        if (!machineName) {
+          message.textContent = 'Informe o nome da máquina para pesquisar'
+          message.classList.add('error')
+          output.textContent = 'Nenhuma consulta executada.'
+          return
+        }
 
         message.textContent = ''
         message.className = 'message'
 
         try {
-          const response = await fetch(`/api/sipe/hardware/${id}`, {
+          const response = await fetch(`/api/sipe/hardware?name=${encodeURIComponent(machineName)}`, {
             headers: {
               Authorization: `Bearer ${getJwtToken()}`
             }
@@ -82,7 +89,7 @@
             return
           }
 
-          message.textContent = 'Consulta realizada com sucesso'
+          message.textContent = 'Pesquisa realizada com sucesso'
           message.classList.add('success')
           output.textContent = JSON.stringify(data, null, 2)
         } catch (error) {
