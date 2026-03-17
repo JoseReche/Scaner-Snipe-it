@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scanner PA | Snipe-IT</title>
+<link rel="stylesheet" href="/auth.css" />
+<script src="https://unpkg.com/html5-qrcode"></script>
+</head>
+<body>
+<div class="container">
+  <div class="topbar">
+    <h3>Scanner PA</h3>
+    <div class="menu-wrapper">
+      <button id="menu-toggle" class="menu-toggle" type="button" aria-label="Abrir menu">☰</button>
+      <nav id="menu-panel" class="menu-panel" aria-label="Navegação principal">
+        <a href="/scanner-pa.html">Scanner PA</a>
+        <a href="/scanner.html">Scanner Completo</a>
+        <a href="/usuario.html">Usuário</a>
+        <a href="/dashboard.html">Dashboard</a>
+        <a href="#" onclick="logout(event)">Sair</a>
+      </nav>
+    </div>
+  </div>
+
+  <div class="grid scanner-grid">
+    <section class="card">
+      <h3>Leitura do QR Code</h3>
+
+      <button id="startScanBtn" class="scan-button" onclick="startScanner()">📷 ESCANEAR QR CODE</button>
+      <div id="reader" style="display:none"></div>
+
+      <p class="small">Você também pode digitar manualmente o ID do ativo.</p>
+
+      <label>ID do ativo</label>
+      <input id="manualAsset" placeholder="Ex.: 2170">
+
+      <button onclick="loadAssetFromInput()">Buscar ativo</button>
+    </section>
+
+    <section class="card">
+      <h3>Alterar PA</h3>
+
+      <div id="emptyState" class="small">Escaneie um ativo para visualizar e atualizar o PA.</div>
+
+      <div id="assetPanel" style="display:none">
+        <div class="info-grid">
+          <div class="info-item"><b>Nome:</b> <span id="view-name">-</span></div>
+          <div class="info-item"><b>PA atual:</b> <span id="view-pa">-</span></div>
+        </div>
+
+        <h3 style="margin-top:16px">Novo PA</h3>
+        <label>PA</label>
+        <input id="editPA" type="number" inputmode="numeric">
+
+        <button id="saveButton" onclick="saveAssetPa()">Salvar PA</button>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script src="/js/auth.js"></script>
+<script>
+requireAuthToken()
+
+let currentAssetId = null
+let scanner = null
+let scanning = false
+let lastScan = null
+
+const byId = (id) => document.getElementById(id)
+
+const menuToggle = byId('menu-toggle')
+const menuPanel = byId('menu-panel')
+
+menuToggle.addEventListener('click', () => {
+  menuPanel.classList.toggle('open')
+})
+
+document.addEventListener('click', (event) => {
+  if (!menuPanel.contains(event.target) && !menuToggle.contains(event.target)) {
+    menuPanel.classList.remove('open')
+  }
+})
+
+const authHeaders = (extra = {}) => ({
+  ...extra,
+  Authorization: `Bearer ${getJwtToken()}`
+})
+
+function logout(event) {
+  if (event) event.preventDefault()
+  clearJwtToken()
+  window.location.href = '/login.html'
+}
+
+function isAuthTokenError(data) {
+  const message = (data?.error || '').toLowerCase()
+  return message.includes('token inválido') || message.includes('token ausente') || message.includes('token expirado')
+}
+
+function parseAssetId(raw) {
+  if (!raw) return null
+  if (raw.includes('hardware/')) return raw.split('hardware/')[1].trim()
+  return raw.trim()
+}
+
+function fillPanel(asset) {
+  byId('emptyState').style.display = 'none'
+  byId('assetPanel').style.display = 'block'
+
+  byId('view-name').textContent = asset.name || '-'
+  byId('view-pa').textContent = asset.pa || '-'
+  byId('editPA').value = asset.customFields?.PA || ''
+}
+
+async function loadAsset(assetId) {
+  const res = await fetch('/asset/' + assetId, { headers: authHeaders() })
+  const data = await res.json()
+
+  if (res.status === 401 && isAuthTokenError(data)) {
+    logout()
+    return
+  }
+
+  if (!res.ok) {
+    alert(data.error || 'Falha ao buscar ativo')
+    return
+  }
+
+  currentAssetId = data.id
+  byId('manualAsset').value = data.id
+  fillPanel(data)
+}
+
+function loadAssetFromInput() {
+  const id = parseAssetId(byId('manualAsset').value)
+  if (!id) return
+  loadAsset(id)
+}
+
+function onScanSuccess(decodedText) {
+  const id = parseAssetId(decodedText)
+
+  if (id === lastScan) return
+  lastScan = id
+
+  if (navigator.vibrate) navigator.vibrate(120)
+
+  document.body.classList.add('scan-success')
+  setTimeout(() => {
+    document.body.classList.remove('scan-success')
+  }, 500)
+
+  loadAsset(id)
+}
+
+async function startScanner() {
+  if (scanning) return
+
+  byId('reader').style.display = 'block'
+
+  scanner = new Html5QrcodeScanner('reader', {
+    fps: 10,
+    qrbox: { width: 220, height: 220 }
+  })
+
+  scanner.render(onScanSuccess)
+  scanning = true
+}
+
+async function saveAssetPa() {
+  if (!currentAssetId) return
+
+  const payload = {
+    pa: byId('editPA').value
+  }
+
+  const btn = byId('saveButton')
+  btn.disabled = true
+  btn.textContent = 'Salvando...'
+
+  const res = await fetch('/asset/' + currentAssetId, {
+    method: 'PATCH',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(payload)
+  })
+
+  const data = await res.json()
+
+  if (res.status === 401 && isAuthTokenError(data)) {
+    logout()
+    return
+  }
+
+  if (!res.ok) {
+    alert(data.error || 'Falha ao atualizar PA')
+    btn.disabled = false
+    btn.textContent = 'Salvar PA'
+    return
+  }
+
+  fillPanel(data.asset)
+  btn.disabled = false
+  btn.textContent = 'Salvar PA'
+
+  alert('PA atualizado')
+}
+</script>
+</body>
+</html>
