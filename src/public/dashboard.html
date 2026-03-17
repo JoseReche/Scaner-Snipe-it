@@ -25,8 +25,8 @@
       <div class="grid single-column">
         <section class="card">
           <h2>Consulta de ativo</h2>
-          <label for="machine-name">Nome da máquina</label>
-          <input id="machine-name" type="text" placeholder="Ex.: NOTEBOOK-2170" />
+          <label for="machine-name">Nome da máquina ou ID do ativo</label>
+          <input id="machine-name" type="text" placeholder="Ex.: PC01 ou 2170" />
 
           <button id="load-asset">Consultar</button>
 
@@ -65,7 +65,7 @@
         const machineName = document.getElementById('machine-name').value.trim()
 
         if (!machineName) {
-          message.textContent = 'Informe o nome da máquina para pesquisar'
+          message.textContent = 'Informe o nome da máquina ou o ID do ativo para pesquisar'
           message.classList.add('error')
           output.textContent = 'Nenhuma consulta executada.'
           return
@@ -75,7 +75,12 @@
         message.className = 'message'
 
         try {
-          const response = await fetch(`/api/sipe/hardware?name=${encodeURIComponent(machineName)}`, {
+          const searchById = /^\d+$/.test(machineName)
+          const endpoint = searchById
+            ? `/api/sipe/hardware/${machineName}`
+            : `/api/sipe/hardware?name=${encodeURIComponent(machineName)}`
+
+          const response = await fetch(endpoint, {
             headers: {
               Authorization: `Bearer ${getJwtToken()}`
             }
@@ -89,7 +94,7 @@
             return
           }
 
-          message.textContent = 'Pesquisa realizada com sucesso'
+          message.textContent = searchById ? 'Consulta por ID realizada com sucesso' : 'Pesquisa por nome realizada com sucesso'
           message.classList.add('success')
           output.textContent = JSON.stringify(data, null, 2)
         } catch (error) {
