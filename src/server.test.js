@@ -234,6 +234,66 @@ test('POST /move atualiza o campo customizado _snipeit_pa_6', async () => {
   }
 })
 
+
+
+test('POST /home-office/baixa realiza checkin opcional e atualiza status do ativo', async () => {
+  const originalGet = axios.get
+  const originalPost = axios.post
+  const originalPatch = axios.patch
+
+  const calls = []
+
+  axios.post = async (url, payload) => {
+    calls.push({ method: 'post', url, payload })
+    return { data: { status: 'success' } }
+  }
+
+  axios.patch = async (url, payload) => {
+    calls.push({ method: 'patch', url, payload })
+    return { data: { status: 'success' } }
+  }
+
+  axios.get = async (url) => {
+    if (url.endsWith('/hardware/10')) {
+      return { data: baseAsset }
+    }
+
+    throw new Error(`URL inesperada no GET: ${url}`)
+  }
+
+  const server = app.listen(0)
+  const { port } = server.address()
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/home-office/baixa`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeader() },
+      body: JSON.stringify({
+        asset: 10,
+        status_id: '8',
+        notes: 'Baixa de kit home office',
+        do_checkin: true
+      })
+    })
+
+    const data = await response.json()
+
+    assert.equal(response.status, 200)
+    assert.equal(data.success, true)
+    assert.equal(calls.length, 2)
+    assert.equal(calls[0].method, 'post')
+    assert.match(calls[0].url, /\/hardware\/10\/checkin$/)
+    assert.equal(calls[1].method, 'patch')
+    assert.match(calls[1].url, /\/hardware\/10$/)
+    assert.equal(calls[1].payload.status_id, 8)
+    assert.equal(calls[1].payload.notes, 'Baixa de kit home office')
+  } finally {
+    server.close()
+    axios.get = originalGet
+    axios.post = originalPost
+    axios.patch = originalPatch
+  }
+})
 test('POST /api/auth/register cria usuário e impede matrícula duplicada', async () => {
   const server = app.listen(0)
   const { port } = server.address()

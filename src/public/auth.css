@@ -276,3 +276,28 @@ pre {
   .container { padding: 12px; }
   .grid, .scanner-grid, .info-grid { grid-template-columns: 1fr; }
 }
+
+
+.security-seal {
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 30;
+  font-size: 12px;
+  text-decoration: none;
+  font-weight: 700;
+  padding: 8px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+.security-seal.ok {
+  border-color: #16a34a;
+}
+
+.security-seal.warn {
+  border-color: #f59e0b;
+}

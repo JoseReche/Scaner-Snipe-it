@@ -44,6 +44,24 @@ const initThemeToggle = () => {
   applyTheme(document.documentElement.getAttribute('data-theme'))
 }
 
+
+const initSecuritySeal = () => {
+  if (document.getElementById('security-seal')) {
+    return
+  }
+
+  const protocolIsSecure = window.location.protocol === 'https:' || window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+
+  const seal = document.createElement('a')
+  seal.id = 'security-seal'
+  seal.className = `security-seal ${protocolIsSecure ? 'ok' : 'warn'}`
+  seal.href = '/seguranca'
+  seal.title = 'Informações do certificado e segurança'
+  seal.textContent = protocolIsSecure ? '🔒 Site verificado' : '⚠️ Verifique o certificado'
+
+  document.body.appendChild(seal)
+}
+
 const setFeedback = (element, text, type) => {
   element.textContent = text
   element.className = 'message'
@@ -148,4 +166,7 @@ const setupRegisterForm = (formId, messageId) => {
   })
 }
 
-document.addEventListener('DOMContentLoaded', initThemeToggle)
+document.addEventListener('DOMContentLoaded', () => {
+  initThemeToggle()
+  initSecuritySeal()
+})

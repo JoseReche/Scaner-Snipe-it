@@ -26,7 +26,9 @@ const htmlRoutes = {
   "/usuario": "usuario.html",
   "/dashboard": "dashboard.html",
   "/register": "register.html",
-  "/change-password": "change-password.html"
+  "/change-password": "change-password.html",
+  "/home-office": "home-office.html",
+  "/seguranca": "seguranca.html"
 }
 
 for (const [routePath, fileName] of Object.entries(htmlRoutes)) {
@@ -515,6 +517,51 @@ app.patch("/asset/:id", async (req, res) => {
     // Ponto de debug na atualização do ativo no Snipe-IT.
     logApiError("PATCH /asset/:id", e)
     return res.status(getErrorStatusCode(e)).json(buildClientError(e, "Erro ao atualizar ativo"))
+  }
+})
+
+
+app.post("/home-office/baixa", async (req, res) => {
+  const { asset, status_id: statusId, notes, do_checkin: doCheckin } = req.body
+
+  if (asset === undefined || asset === null || asset === "" || statusId === undefined || statusId === null || statusId === "") {
+    return res.status(400).json({ error: "Campos asset e status_id são obrigatórios" })
+  }
+
+  const parsedAsset = parseIntegerField(asset)
+  const parsedStatusId = parseIntegerField(statusId)
+
+  if (parsedAsset === undefined || parsedStatusId === undefined) {
+    return res.status(400).json({ error: "asset e status_id devem ser números válidos" })
+  }
+
+  const payload = {
+    status_id: parsedStatusId
+  }
+
+  if (notes !== undefined) {
+    payload.notes = String(notes)
+  }
+
+  try {
+    const requestHeaders = await getUserHeaders(req)
+
+    if (doCheckin) {
+      await axios.post(`${SNIPE_URL}/hardware/${parsedAsset}/checkin`, {}, { headers: requestHeaders })
+    }
+
+    await axios.patch(`${SNIPE_URL}/hardware/${parsedAsset}`, payload, { headers: requestHeaders })
+
+    const updatedAsset = await fetchAssetById(parsedAsset, requestHeaders)
+
+    return res.json({ success: true, asset: mapAsset(updatedAsset) })
+  } catch (e) {
+    if (e.statusCode) {
+      return res.status(e.statusCode).json({ error: e.message })
+    }
+
+    logApiError("POST /home-office/baixa", e)
+    return res.status(getErrorStatusCode(e)).json(buildClientError(e, "Erro ao realizar baixa do kit home office"))
   }
 })
 
