@@ -83,6 +83,12 @@ Escaneie um ativo para visualizar e editar os dados.
 <label>Local Padrão</label>
 <select id="editRTD"></select>
 
+<label>Empresa</label>
+<select id="editCompany"></select>
+
+<label>Atribuído para</label>
+<select id="editAssignedTo"></select>
+
 <label>Notas</label>
 <textarea id="editNotes"></textarea>
 
@@ -103,6 +109,8 @@ requireAuthToken()
 let currentAssetId=null
 let statusOptions=[]
 let locationOptions=[]
+let companyOptions=[]
+let userOptions=[]
 let optionsLoaded=false
 let scanner=null
 let scanning=false
@@ -181,10 +189,14 @@ return
 
 statusOptions=data.statuses||[]
 locationOptions=data.locations||[]
+companyOptions=data.companies||[]
+userOptions=data.users||[]
 
 fillSelect("editStatus",statusOptions,null,"Selecione")
 fillSelect("editLocation",locationOptions,null,"Selecione")
 fillSelect("editRTD",locationOptions,null,"Selecione")
+fillSelect("editCompany",companyOptions,null,"Selecione")
+fillSelect("editAssignedTo",userOptions,null,"Selecione")
 optionsLoaded=true
 
 }
@@ -232,6 +244,8 @@ byId("editNotes").value=asset.notes||""
 fillSelect("editStatus",statusOptions,asset.statusId,"Selecione")
 fillSelect("editLocation",locationOptions,asset.locationId,"Selecione")
 fillSelect("editRTD",locationOptions,asset.rtdLocationId,"Selecione")
+fillSelect("editCompany",companyOptions,asset.companyId,"Selecione")
+fillSelect("editAssignedTo",userOptions,asset.assignedToId,"Selecione")
 
 }
 
@@ -317,6 +331,8 @@ pa:byId("editPA").value,
 status_id:byId("editStatus").value,
 location_id:byId("editLocation").value,
 rtd_location_id:byId("editRTD").value,
+company_id:byId("editCompany").value,
+assigned_to:byId("editAssignedTo").value,
 notes:byId("editNotes").value
 }
 

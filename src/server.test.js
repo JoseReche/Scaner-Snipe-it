@@ -116,6 +116,24 @@ test('buildAssetPayload usa db_column quando o custom field não expõe a propri
   axios.get = originalGet
 })
 
+
+
+test('buildAssetPayload inclui company_id e assigned_to como inteiros', async () => {
+  const originalGet = axios.get
+
+  axios.get = async () => ({ data: baseAsset })
+
+  const payload = await buildAssetPayload(10, {
+    company_id: '11',
+    assigned_to: '22'
+  })
+
+  assert.equal(payload.company_id, 11)
+  assert.equal(payload.assigned_to, 22)
+
+  axios.get = originalGet
+})
+
 test('PATCH /asset/:id aplica atualização e devolve ativo mapeado', async () => {
   const originalGet = axios.get
   const originalPatch = axios.patch
@@ -420,5 +438,47 @@ test('POST /api/auth/register e POST /api/auth/login não consultam API do Snipe
     axios.get = originalGet
     axios.post = originalPost
     axios.patch = originalPatch
+  }
+})
+
+
+test('GET /options retorna status, locais, empresas e usuários', async () => {
+  const originalGet = axios.get
+
+  axios.get = async (url) => {
+    if (url.endsWith('/statuslabels')) {
+      return { data: { rows: [{ id: 1, name: 'Ativo' }] } }
+    }
+
+    if (url.endsWith('/locations')) {
+      return { data: { rows: [{ id: 2, name: 'Matriz' }] } }
+    }
+
+    if (url.endsWith('/companies')) {
+      return { data: { rows: [{ id: 3, name: 'Empresa A' }] } }
+    }
+
+    if (url.endsWith('/users')) {
+      return { data: { rows: [{ id: 4, name: 'Usuário A' }] } }
+    }
+
+    throw new Error(`URL inesperada no GET: ${url}`)
+  }
+
+  const server = app.listen(0)
+  const { port } = server.address()
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/options`, { headers: authHeader() })
+    const data = await response.json()
+
+    assert.equal(response.status, 200)
+    assert.deepEqual(data.statuses, [{ id: 1, name: 'Ativo' }])
+    assert.deepEqual(data.locations, [{ id: 2, name: 'Matriz' }])
+    assert.deepEqual(data.companies, [{ id: 3, name: 'Empresa A' }])
+    assert.deepEqual(data.users, [{ id: 4, name: 'Usuário A' }])
+  } finally {
+    server.close()
+    axios.get = originalGet
   }
 })

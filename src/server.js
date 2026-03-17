@@ -79,7 +79,10 @@ const mapAsset = (asset) => ({
   status: asset.status_label?.name || null,
   statusId: asset.status_label?.id || null,
   company: asset.company?.name || null,
+  companyId: asset.company?.id || null,
   manufacturer: asset.manufacturer?.name || null,
+  assignedTo: asset.assigned_to?.name || null,
+  assignedToId: asset.assigned_to?.id || null,
   location: asset.location?.name || null,
   locationId: asset.location?.id || null,
   rtdLocation: asset.rtd_location?.name || null,
@@ -294,7 +297,7 @@ const buildClientError = (error, fallback) => {
 
 const buildAssetPayload = async (assetId, body, requestHeaders) => {
   const allowedTextFields = ["notes"]
-  const allowedIntegerFields = ["location_id", "rtd_location_id", "status_id", "model_id", "company_id"]
+  const allowedIntegerFields = ["location_id", "rtd_location_id", "status_id", "model_id", "company_id", "assigned_to"]
   const payload = {}
 
   for (const field of allowedTextFields) {
@@ -394,15 +397,21 @@ app.get("/move-info", async (req, res) => {
 app.get("/options", async (req, res) => {
   try {
     const requestHeaders = await getUserHeaders(req)
-    const [statusRows, locationRows] = await Promise.all([
+    const [statusRows, locationRows, companyRows, userRows] = await Promise.all([
       fetchPaginatedRows("statuslabels", requestHeaders),
-      fetchPaginatedRows("locations", requestHeaders)
+      fetchPaginatedRows("locations", requestHeaders),
+      fetchPaginatedRows("companies", requestHeaders),
+      fetchPaginatedRows("users", requestHeaders)
     ])
 
     const statuses = statusRows.map((item) => ({ id: item.id, name: item.name })).filter((item) => item.id && item.name)
     const locations = locationRows.map((item) => ({ id: item.id, name: item.name })).filter((item) => item.id && item.name)
+    const companies = companyRows.map((item) => ({ id: item.id, name: item.name })).filter((item) => item.id && item.name)
+    const users = userRows
+      .map((item) => ({ id: item.id, name: item.name || item.username || item.email }))
+      .filter((item) => item.id && item.name)
 
-    return res.json({ statuses, locations })
+    return res.json({ statuses, locations, companies, users })
   } catch (e) {
     if (e.statusCode) {
       return res.status(e.statusCode).json({ error: e.message })
