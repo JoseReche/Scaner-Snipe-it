@@ -482,3 +482,22 @@ test('GET /options retorna status, locais, empresas e usuários', async () => {
     axios.get = originalGet
   }
 })
+
+
+test('Rotas públicas usam URLs limpas e redirecionam .html', async () => {
+  const server = app.listen(0)
+  const { port } = server.address()
+
+  try {
+    const cleanResponse = await fetch(`http://127.0.0.1:${port}/scanner`)
+    assert.equal(cleanResponse.status, 200)
+    const cleanHtml = await cleanResponse.text()
+    assert.match(cleanHtml, /Scanner de Ativos/)
+
+    const legacyResponse = await fetch(`http://127.0.0.1:${port}/scanner.html`, { redirect: 'manual' })
+    assert.equal(legacyResponse.status, 301)
+    assert.equal(legacyResponse.headers.get('location'), '/scanner')
+  } finally {
+    server.close()
+  }
+})

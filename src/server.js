@@ -15,7 +15,33 @@ const app = express()
 
 app.use(cors())
 app.use(express.json())
-app.use(express.static(path.join(__dirname, "public")))
+
+const publicDir = path.join(__dirname, "public")
+
+const htmlRoutes = {
+  "/": "login.html",
+  "/login": "login.html",
+  "/scanner": "scanner.html",
+  "/scanner-pa": "scanner-pa.html",
+  "/usuario": "usuario.html",
+  "/dashboard": "dashboard.html",
+  "/register": "register.html",
+  "/change-password": "change-password.html"
+}
+
+for (const [routePath, fileName] of Object.entries(htmlRoutes)) {
+  app.get(routePath, (req, res) => {
+    res.sendFile(path.join(publicDir, fileName))
+  })
+
+  if (routePath !== "/") {
+    app.get(`${routePath}.html`, (req, res) => {
+      res.redirect(301, routePath)
+    })
+  }
+}
+
+app.use(express.static(publicDir))
 
 app.use("/api/auth", authRouter)
 app.use("/api/sipe", sipeRouter)

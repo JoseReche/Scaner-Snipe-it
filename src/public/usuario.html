@@ -11,14 +11,14 @@
       <div class="topbar">
         <h3>Usuário</h3>
         <div id="guest-nav">
-          <a href="/login.html">Ir para login</a>
+          <a href="/login">Ir para login</a>
         </div>
         <div id="auth-nav" class="menu-wrapper" style="display: none">
           <button id="menu-toggle" class="menu-toggle" type="button" aria-label="Abrir menu">☰</button>
           <nav id="menu-panel" class="menu-panel" aria-label="Navegação principal">
-            <a href="/scanner.html">Scanner</a>
-            <a href="/usuario.html">Usuário</a>
-            <a href="/dashboard.html">Dashboard</a>
+            <a href="/scanner">Scanner</a>
+            <a href="/usuario">Usuário</a>
+            <a href="/dashboard">Dashboard</a>
             <a href="#" id="logout-link">Sair</a>
           </nav>
         </div>
@@ -105,7 +105,7 @@
         document.getElementById('logout-link').addEventListener('click', (event) => {
           event.preventDefault()
           clearJwtToken()
-          window.location.href = '/login.html'
+          window.location.href = '/login'
         })
       } else {
         authSection.style.display = 'none'
