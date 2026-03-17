@@ -4,7 +4,6 @@ const sqlite3 = require('sqlite3')
 const { encryptApiKey } = require('../auth/crypto')
 
 const USERS_DB_FILE = path.join(__dirname, '..', 'data', 'users.sqlite')
-const LEGACY_JSON_DB_FILE = path.join(__dirname, '..', 'data', 'users.db.json')
 const LEGACY_USERS_FILE = path.join(__dirname, '..', 'data', 'users.json')
 
 let dbInitPromise
@@ -126,10 +125,7 @@ const initializeDatabase = async () => {
     return db
   }
 
-  const legacyUsers = [
-    ...(await readLegacyUsersFromFile(LEGACY_JSON_DB_FILE)),
-    ...(await readLegacyUsersFromFile(LEGACY_USERS_FILE))
-  ]
+  const legacyUsers = await readLegacyUsersFromFile(LEGACY_USERS_FILE)
 
   const uniqueByMatricula = new Map()
 
@@ -265,7 +261,6 @@ const createUser = async (userData) => {
 
 module.exports = {
   USERS_DB_FILE,
-  LEGACY_JSON_DB_FILE,
   LEGACY_USERS_FILE,
   readUsers,
   writeUsers,

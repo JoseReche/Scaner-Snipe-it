@@ -53,7 +53,7 @@ npm install
 - API token nunca é salvo em texto puro: é criptografado com AES-256-GCM + chave derivada via scrypt (com salt aleatório por registro).
 - Senhas são armazenadas apenas como hash bcrypt.
 - O serviço lê/salva apenas os campos mínimos do usuário (`matricula`, `password_hash`, `api_key_encrypted`).
-- Há migração automática dos formatos legados `users.db.json`/`users.json` para SQLite na primeira execução.
+- Há migração automática do formato legado `users.json` para SQLite na primeira execução.
 - `ENCRYPTION_KEY` precisa ter no mínimo 16 caracteres (recomendado 32+).
 
 ## Frontend
