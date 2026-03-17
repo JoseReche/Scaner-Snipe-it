@@ -18,7 +18,7 @@ const loginLimiter = rateLimit({
 router.post(
   '/login',
   loginLimiter,
-  body('matricula').isString().trim().notEmpty().isLength({ min: 3, max: 30 }),
+  body('matricula').isString().trim().notEmpty().isLength({ min: 3, max: 30 }).matches(/^[A-Za-z0-9_-]+$/),
   body('password').isString().isLength({ min: 8, max: 128 }),
   validationMiddleware,
   login
@@ -28,7 +28,7 @@ router.post(
 router.post(
   '/register',
   guestOnlyMiddleware,
-  body('matricula').isString().trim().notEmpty().isLength({ min: 3, max: 30 }),
+  body('matricula').isString().trim().notEmpty().isLength({ min: 3, max: 30 }).matches(/^[A-Za-z0-9_-]+$/),
   body('password').isString().isLength({ min: 12, max: 128 }).matches(/[A-Z]/).matches(/[a-z]/).matches(/[0-9]/).matches(/[^A-Za-z0-9]/),
   body('apiKey').isString().trim().notEmpty().isLength({ min: 10, max: 999 }),
   validationMiddleware,
