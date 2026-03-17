@@ -9,29 +9,27 @@
   <body>
     <div class="container">
       <div class="topbar">
-        <h3>Dashboard Privado</h3>
-        <a href="/scanner.html">Ir para Scanner</a>
+        <h3>Dashboard</h3>
+        <div class="menu-wrapper">
+          <button id="menu-toggle" class="menu-toggle" type="button" aria-label="Abrir menu">☰</button>
+          <nav id="menu-panel" class="menu-panel" aria-label="Navegação principal">
+            <a href="/scanner.html">Scanner</a>
+            <a href="/usuario.html">Usuário</a>
+            <a href="/dashboard.html">Dashboard</a>
+            <a href="#" id="logout-link">Sair</a>
+          </nav>
+        </div>
       </div>
 
-      <div class="grid">
+      <div class="grid single-column">
         <section class="card">
-          <h2>Consulta SIpe IT</h2>
-          <p class="small">Esta consulta usa a API Key do usuário descriptografada apenas no backend.</p>
-
+          <h2>Consulta de ativo</h2>
           <label for="asset-id">ID do ativo</label>
           <input id="asset-id" type="number" value="1" min="1" />
 
-          <div class="actions">
-            <button id="load-asset">Buscar ativo</button>
-            <button id="change-password" class="secondary">Alterar senha</button>
-            <button id="logout" class="secondary">Sair</button>
-          </div>
+          <button id="load-asset">Consultar</button>
 
           <p id="message" class="message" aria-live="polite"></p>
-        </section>
-
-        <section class="card">
-          <h2>Resultado</h2>
           <pre id="output">Nenhuma consulta executada.</pre>
         </section>
       </div>
@@ -43,6 +41,24 @@
 
       const message = document.getElementById('message')
       const output = document.getElementById('output')
+      const menuToggle = document.getElementById('menu-toggle')
+      const menuPanel = document.getElementById('menu-panel')
+
+      menuToggle.addEventListener('click', () => {
+        menuPanel.classList.toggle('open')
+      })
+
+      document.addEventListener('click', (event) => {
+        if (!menuPanel.contains(event.target) && !menuToggle.contains(event.target)) {
+          menuPanel.classList.remove('open')
+        }
+      })
+
+      document.getElementById('logout-link').addEventListener('click', (event) => {
+        event.preventDefault()
+        clearJwtToken()
+        window.location.href = '/login.html'
+      })
 
       document.getElementById('load-asset').addEventListener('click', async () => {
         const id = document.getElementById('asset-id').value
@@ -73,15 +89,6 @@
           message.classList.add('error')
           output.textContent = error.message
         }
-      })
-
-      document.getElementById('change-password').addEventListener('click', () => {
-        window.location.href = '/change-password.html'
-      })
-
-      document.getElementById('logout').addEventListener('click', () => {
-        clearJwtToken()
-        window.location.href = '/login.html'
       })
     </script>
   </body>

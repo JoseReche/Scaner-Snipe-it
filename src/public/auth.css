@@ -231,3 +231,46 @@ pre {
     background: #0f172a;
   }
 }
+
+.menu-wrapper {
+  position: relative;
+}
+
+.menu-toggle {
+  width: auto;
+  margin-top: 0;
+  padding: 8px 12px;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.menu-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  display: none;
+  min-width: 170px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  padding: 8px;
+  z-index: 10;
+}
+
+.menu-panel.open {
+  display: block;
+}
+
+.menu-panel a {
+  display: block;
+  padding: 8px;
+  border-radius: 6px;
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.menu-panel a:hover {
+  background: #e2e8f0;
+}

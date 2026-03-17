@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Usuário</title>
+    <link rel="stylesheet" href="/auth.css" />
+  </head>
+  <body>
+    <div class="container">
+      <div class="topbar">
+        <h3>Usuário</h3>
+        <div id="guest-nav">
+          <a href="/login.html">Ir para login</a>
+        </div>
+        <div id="auth-nav" class="menu-wrapper" style="display: none">
+          <button id="menu-toggle" class="menu-toggle" type="button" aria-label="Abrir menu">☰</button>
+          <nav id="menu-panel" class="menu-panel" aria-label="Navegação principal">
+            <a href="/scanner.html">Scanner</a>
+            <a href="/usuario.html">Usuário</a>
+            <a href="/dashboard.html">Dashboard</a>
+            <a href="#" id="logout-link">Sair</a>
+          </nav>
+        </div>
+      </div>
+
+      <div class="grid single-column" id="guest-section">
+        <section class="card">
+          <h1>Criar usuário</h1>
+          <p class="small">Cadastro disponível apenas para quem está deslogado.</p>
+
+          <form id="register-form">
+            <label for="matricula">Matrícula</label>
+            <input id="matricula" name="matricula" required minlength="3" maxlength="30" />
+
+            <label for="password">Senha</label>
+            <input id="password" name="password" type="password" required minlength="12" />
+
+            <p class="small">A senha deve conter letra maiúscula, minúscula, número e símbolo.</p>
+
+            <label for="apiKey">Chave pessoal da API</label>
+            <input id="apiKey" name="apiKey" type="password" required minlength="10" autocomplete="off" />
+
+            <div class="actions">
+              <button type="submit">Criar usuário</button>
+            </div>
+          </form>
+
+          <p id="register-message" class="message" aria-live="polite"></p>
+        </section>
+      </div>
+
+      <div class="grid single-column" id="auth-section" style="display: none">
+        <section class="card">
+          <h1>Alteração de senha</h1>
+          <p class="small">A nova senha deve conter no mínimo 12 caracteres, com maiúscula, minúscula, número e símbolo.</p>
+
+          <form id="change-password-form">
+            <label for="currentPassword">Senha atual</label>
+            <input id="currentPassword" name="currentPassword" type="password" required />
+
+            <label for="newPassword">Nova senha</label>
+            <input id="newPassword" name="newPassword" type="password" required />
+
+            <div class="actions">
+              <button type="submit" class="success">Alterar senha</button>
+            </div>
+          </form>
+
+          <p id="change-password-message" class="message" aria-live="polite"></p>
+        </section>
+      </div>
+    </div>
+
+    <script src="/js/auth.js"></script>
+    <script>
+      const isLoggedIn = Boolean(getJwtToken())
+
+      const guestSection = document.getElementById('guest-section')
+      const authSection = document.getElementById('auth-section')
+      const guestNav = document.getElementById('guest-nav')
+      const authNav = document.getElementById('auth-nav')
+
+      if (isLoggedIn) {
+        guestSection.style.display = 'none'
+        guestNav.style.display = 'none'
+        authSection.style.display = 'grid'
+        authNav.style.display = 'block'
+
+        setupChangePasswordForm('change-password-form', 'change-password-message')
+
+        const menuToggle = document.getElementById('menu-toggle')
+        const menuPanel = document.getElementById('menu-panel')
+
+        menuToggle.addEventListener('click', () => {
+          menuPanel.classList.toggle('open')
+        })
+
+        document.addEventListener('click', (event) => {
+          if (!menuPanel.contains(event.target) && !menuToggle.contains(event.target)) {
+            menuPanel.classList.remove('open')
+          }
+        })
+
+        document.getElementById('logout-link').addEventListener('click', (event) => {
+          event.preventDefault()
+          clearJwtToken()
+          window.location.href = '/login.html'
+        })
+      } else {
+        authSection.style.display = 'none'
+        authNav.style.display = 'none'
+        guestSection.style.display = 'grid'
+        guestNav.style.display = 'block'
+
+        setupRegisterForm('register-form', 'register-message')
+      }
+    </script>
+  </body>
+</html>

@@ -261,6 +261,33 @@ test('POST /api/auth/register cria usuário e impede matrícula duplicada', asyn
 })
 
 
+
+test('POST /api/auth/register bloqueia cadastro quando o usuário já está autenticado', async () => {
+  const server = app.listen(0)
+  const { port } = server.address()
+
+  try {
+    const payload = {
+      matricula: `u${Date.now()}`,
+      password: 'SenhaSuperForte!2026',
+      apiKey: 'api-key-do-usuario-123456'
+    }
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeader() },
+      body: JSON.stringify(payload)
+    })
+
+    const data = await response.json()
+
+    assert.equal(response.status, 403)
+    assert.equal(data.error, 'Usuário autenticado não pode criar novo cadastro')
+  } finally {
+    server.close()
+  }
+})
+
 test('GET /asset/:id propaga 401 quando API key do usuário é rejeitada pelo Snipe-IT', async () => {
   const originalGet = axios.get
 
