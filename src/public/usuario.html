@@ -3,13 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Dashboard</title>
+    <title>Usuário</title>
     <link rel="stylesheet" href="/auth.css" />
   </head>
   <body>
     <div class="container">
       <div class="topbar">
-        <h3>Dashboard</h3>
+        <h3>Usuário</h3>
         <div class="menu-wrapper">
           <button id="menu-toggle" class="menu-toggle" type="button" aria-label="Abrir menu">☰</button>
           <nav id="menu-panel" class="menu-panel" aria-label="Navegação principal">
@@ -23,24 +23,35 @@
 
       <div class="grid single-column">
         <section class="card">
-          <h2>Consulta de ativo</h2>
-          <label for="asset-id">ID do ativo</label>
-          <input id="asset-id" type="number" value="1" min="1" />
+          <h1>Criar usuário</h1>
+          <p class="small">Cadastre uma matrícula e senha forte para acessar o sistema.</p>
 
-          <button id="load-asset">Consultar</button>
+          <form id="register-form">
+            <label for="matricula">Matrícula</label>
+            <input id="matricula" name="matricula" required minlength="3" maxlength="30" />
+
+            <label for="password">Senha</label>
+            <input id="password" name="password" type="password" required minlength="12" />
+
+            <p class="small">A senha deve conter letra maiúscula, minúscula, número e símbolo.</p>
+
+            <label for="apiKey">Chave pessoal da API</label>
+            <input id="apiKey" name="apiKey" type="password" required minlength="10" autocomplete="off" />
+
+            <div class="actions">
+              <button type="submit">Criar usuário</button>
+            </div>
+          </form>
 
           <p id="message" class="message" aria-live="polite"></p>
-          <pre id="output">Nenhuma consulta executada.</pre>
         </section>
       </div>
     </div>
 
     <script src="/js/auth.js"></script>
     <script>
-      requireAuthToken()
+      setupRegisterForm('register-form', 'message')
 
-      const message = document.getElementById('message')
-      const output = document.getElementById('output')
       const menuToggle = document.getElementById('menu-toggle')
       const menuPanel = document.getElementById('menu-panel')
 
@@ -58,37 +69,6 @@
         event.preventDefault()
         clearJwtToken()
         window.location.href = '/login.html'
-      })
-
-      document.getElementById('load-asset').addEventListener('click', async () => {
-        const id = document.getElementById('asset-id').value
-
-        message.textContent = ''
-        message.className = 'message'
-
-        try {
-          const response = await fetch(`/api/sipe/hardware/${id}`, {
-            headers: {
-              Authorization: `Bearer ${getJwtToken()}`
-            }
-          })
-          const data = await response.json()
-
-          if (!response.ok) {
-            message.textContent = data.error || 'Falha ao consultar ativo'
-            message.classList.add('error')
-            output.textContent = JSON.stringify(data, null, 2)
-            return
-          }
-
-          message.textContent = 'Consulta realizada com sucesso'
-          message.classList.add('success')
-          output.textContent = JSON.stringify(data, null, 2)
-        } catch (error) {
-          message.textContent = error.message
-          message.classList.add('error')
-          output.textContent = error.message
-        }
       })
     </script>
   </body>

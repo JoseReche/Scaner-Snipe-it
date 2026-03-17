@@ -16,7 +16,15 @@
 
 <div class="topbar">
 <h3>Scanner de Ativos</h3>
+<div class="menu-wrapper">
+<button id="menu-toggle" class="menu-toggle" type="button" aria-label="Abrir menu">☰</button>
+<nav id="menu-panel" class="menu-panel" aria-label="Navegação principal">
+<a href="/scanner.html">Scanner</a>
+<a href="/usuario.html">Usuário</a>
+<a href="/dashboard.html">Dashboard</a>
 <a href="#" onclick="logout(event)">Sair</a>
+</nav>
+</div>
 </div>
 
 <div class="grid scanner-grid">
@@ -101,6 +109,19 @@ let scanning=false
 let lastScan=null
 
 const byId=(id)=>document.getElementById(id)
+
+const menuToggle=byId("menu-toggle")
+const menuPanel=byId("menu-panel")
+
+menuToggle.addEventListener("click",()=>{
+menuPanel.classList.toggle("open")
+})
+
+document.addEventListener("click",(event)=>{
+if(!menuPanel.contains(event.target) && !menuToggle.contains(event.target)){
+menuPanel.classList.remove("open")
+}
+})
 
 const authHeaders = (extra = {}) => ({
 ...extra,
