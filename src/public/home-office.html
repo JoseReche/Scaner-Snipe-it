@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Baixa de Kit Home Office</title>
+<link rel="stylesheet" href="/auth.css" />
+<script src="https://unpkg.com/html5-qrcode"></script>
+</head>
+<body>
+<div class="container">
+  <div class="topbar">
+    <h3>Baixa de Kit Home Office</h3>
+    <div class="menu-wrapper">
+      <button id="menu-toggle" class="menu-toggle" type="button" aria-label="Abrir menu">☰</button>
+      <nav id="menu-panel" class="menu-panel" aria-label="Navegação principal">
+        <a href="/scanner">Scanner</a>
+        <a href="/scanner-pa">Scanner PA</a>
+        <a href="/home-office">Baixa Home Office</a>
+        <a href="/usuario">Usuário</a>
+        <a href="/dashboard">Dashboard</a>
+        <a href="#" onclick="logout(event)">Sair</a>
+      </nav>
+    </div>
+  </div>
+
+  <div class="grid scanner-grid">
+    <section class="card">
+      <h3>Leitura do ativo</h3>
+      <button id="startScanBtn" class="scan-button" onclick="startScanner()">📷 ESCANEAR QR CODE</button>
+      <div id="reader" style="display:none"></div>
+
+      <p class="small">Você também pode digitar manualmente o ID do ativo.</p>
+      <label>ID do ativo</label>
+      <input id="manualAsset" placeholder="Ex.: 2170">
+      <button onclick="loadAssetFromInput()">Buscar ativo</button>
+    </section>
+
+    <section class="card">
+      <h3>Baixa do Kit</h3>
+      <div id="emptyState" class="small">Escaneie um ativo para preencher os dados de baixa.</div>
+
+      <div id="assetPanel" style="display:none">
+        <div class="info-grid">
+          <div class="info-item"><b>Nome:</b> <span id="view-name">-</span></div>
+          <div class="info-item"><b>PA:</b> <span id="view-pa">-</span></div>
+          <div class="info-item"><b>Status:</b> <span id="view-status">-</span></div>
+          <div class="info-item"><b>Atribuído:</b> <span id="view-assigned">-</span></div>
+        </div>
+
+        <label>Status de baixa</label>
+        <select id="editStatus"></select>
+
+        <label>Observações</label>
+        <textarea id="editNotes" placeholder="Ex.: devolução de kit home office"></textarea>
+
+        <label style="display:flex;align-items:center;gap:8px;margin-top:12px;">
+          <input id="doCheckin" type="checkbox" style="width:auto;"> Realizar check-in antes da baixa
+        </label>
+
+        <button id="saveButton" onclick="saveBaixa()">Confirmar baixa</button>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script src="/js/auth.js"></script>
+<script>
+requireAuthToken()
+
+let currentAssetId = null
+let scanner = null
+let scanning = false
+let lastScan = null
+let statusOptions = []
+
+const byId = (id) => document.getElementById(id)
+
+const menuToggle = byId('menu-toggle')
+const menuPanel = byId('menu-panel')
+
+menuToggle.addEventListener('click', () => {
+  menuPanel.classList.toggle('open')
+})
+
+document.addEventListener('click', (event) => {
+  if (!menuPanel.contains(event.target) && !menuToggle.contains(event.target)) {
+    menuPanel.classList.remove('open')
+  }
+})
+
+const authHeaders = (extra = {}) => ({
+  ...extra,
+  Authorization: `Bearer ${getJwtToken()}`
+})
+
+function logout(event) {
+  if (event) event.preventDefault()
+  clearJwtToken()
+  window.location.href = '/login'
+}
+
+function isAuthTokenError(data) {
+  const message = (data?.error || '').toLowerCase()
+  return message.includes('token inválido') || message.includes('token ausente') || message.includes('token expirado')
+}
+
+function parseAssetId(raw) {
+  if (!raw) return null
+  if (raw.includes('hardware/')) return raw.split('hardware/')[1].trim()
+  return raw.trim()
+}
+
+function fillStatusOptions(selectedValue) {
+  const select = byId('editStatus')
+  select.innerHTML = ''
+
+  const empty = document.createElement('option')
+  empty.value = ''
+  empty.textContent = 'Selecione'
+  select.appendChild(empty)
+
+  statusOptions.forEach((item) => {
+    const opt = document.createElement('option')
+    opt.value = item.id
+    opt.textContent = `${item.id} - ${item.name}`
+    select.appendChild(opt)
+  })
+
+  if (selectedValue) select.value = selectedValue
+}
+
+async function loadStatusOptions() {
+  const res = await fetch('/options', { headers: authHeaders() })
+  const data = await res.json()
+
+  if (res.status === 401 && isAuthTokenError(data)) {
+    logout()
+    return
+  }
+
+  if (!res.ok) {
+    alert(data.error || 'Falha ao carregar status')
+    return
+  }
+
+  statusOptions = data.statuses || []
+  fillStatusOptions(null)
+}
+
+function fillPanel(asset) {
+  byId('emptyState').style.display = 'none'
+  byId('assetPanel').style.display = 'block'
+
+  byId('view-name').textContent = asset.name || '-'
+  byId('view-pa').textContent = asset.pa || '-'
+  byId('view-status').textContent = asset.status || '-'
+  byId('view-assigned').textContent = asset.assignedTo || '-'
+
+  fillStatusOptions(asset.statusId)
+  byId('editNotes').value = asset.notes || ''
+}
+
+async function loadAsset(assetId) {
+  const res = await fetch('/asset/' + assetId, { headers: authHeaders() })
+  const data = await res.json()
+
+  if (res.status === 401 && isAuthTokenError(data)) {
+    logout()
+    return
+  }
+
+  if (!res.ok) {
+    alert(data.error || 'Falha ao buscar ativo')
+    return
+  }
+
+  currentAssetId = data.id
+  byId('manualAsset').value = data.id
+  fillPanel(data)
+}
+
+function loadAssetFromInput() {
+  const id = parseAssetId(byId('manualAsset').value)
+  if (!id) return
+  loadAsset(id)
+}
+
+function onScanSuccess(decodedText) {
+  const id = parseAssetId(decodedText)
+
+  if (id === lastScan) return
+  lastScan = id
+
+  if (navigator.vibrate) navigator.vibrate(120)
+
+  document.body.classList.add('scan-success')
+  setTimeout(() => {
+    document.body.classList.remove('scan-success')
+  }, 500)
+
+  loadAsset(id)
+}
+
+async function startScanner() {
+  if (scanning) return
+
+  byId('reader').style.display = 'block'
+
+  scanner = new Html5QrcodeScanner('reader', {
+    fps: 10,
+    qrbox: { width: 220, height: 220 }
+  })
+
+  scanner.render(onScanSuccess)
+  scanning = true
+}
+
+async function saveBaixa() {
+  if (!currentAssetId) return
+
+  const payload = {
+    asset: currentAssetId,
+    status_id: byId('editStatus').value,
+    notes: byId('editNotes').value,
+    do_checkin: byId('doCheckin').checked
+  }
+
+  const btn = byId('saveButton')
+  btn.disabled = true
+  btn.textContent = 'Salvando...'
+
+  const res = await fetch('/home-office/baixa', {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(payload)
+  })
+
+  const data = await res.json()
+
+  if (res.status === 401 && isAuthTokenError(data)) {
+    logout()
+    return
+  }
+
+  if (!res.ok) {
+    alert(data.error || 'Falha na baixa do kit home office')
+    btn.disabled = false
+    btn.textContent = 'Confirmar baixa'
+    return
+  }
+
+  fillPanel(data.asset)
+  btn.disabled = false
+  btn.textContent = 'Confirmar baixa'
+  alert('Baixa do kit realizada com sucesso')
+}
+
+loadStatusOptions()
+</script>
+</body>
+</html>
