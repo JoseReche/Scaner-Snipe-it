@@ -105,6 +105,13 @@ const mapAsset = (asset) => ({
   manufacturer: asset.manufacturer?.name || null,
   assignedTo: asset.assigned_to?.name || null,
   assignedToId: asset.assigned_to?.id || null,
+  assigned_to: asset.assigned_to
+    ? {
+      id: asset.assigned_to.id ?? null,
+      username: asset.assigned_to.username ?? null,
+      name: asset.assigned_to.name ?? null
+    }
+    : null,
   location: asset.location?.name || null,
   locationId: asset.location?.id || null,
   rtdLocation: asset.rtd_location?.name || null,

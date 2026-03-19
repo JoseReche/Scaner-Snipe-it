@@ -69,6 +69,7 @@ const baseAsset = {
   serial: 'S1',
   name: 'Notebook',
   status_label: { id: 2, name: 'Ativo' },
+  assigned_to: { id: 73, username: 'usr.estoque', name: 'estoque matriz' },
   location: { id: 3, name: 'Matriz' },
   rtd_location: { id: 4, name: 'PA-OLD' },
   custom_fields: {
@@ -235,6 +236,9 @@ test('PATCH /asset/:id aplica atualização e devolve ativo mapeado', async () =
     assert.equal(requests[0].payload._snipeit_pa_1, 'PA-API')
     assert.equal(requests[0].payload.status_id, 7)
     assert.equal(requests[0].payload.custom_fields, undefined)
+    assert.equal(data.asset.assigned_to.id, 73)
+    assert.equal(data.asset.assigned_to.username, 'usr.estoque')
+    assert.equal(data.asset.assigned_to.name, 'estoque matriz')
   } finally {
     server.close()
     axios.get = originalGet
