@@ -176,11 +176,28 @@ const sortOptionsByName = (items) => items.sort((a, b) =>
   String(a.name).localeCompare(String(b.name), "pt-BR", { numeric: true, sensitivity: "base" })
 )
 
+const getAssetCheckState = (asset) => (asset?.assigned_to?.id ? "checkout" : "checkin")
+
 const updateAssetAssignment = async (assetId, assignedUserId, requestHeaders) => {
+  const currentAsset = await fetchAssetById(assetId, requestHeaders)
+  const currentState = getAssetCheckState(currentAsset)
+  const currentAssignedUserId = parseIntegerField(currentAsset?.assigned_to?.id)
   const parsedUserId = parseIntegerField(assignedUserId)
 
   if (parsedUserId === undefined) {
+    if (currentState === "checkout") {
+      await axios.post(`${SNIPE_URL}/hardware/${assetId}/checkin`, {}, { headers: requestHeaders })
+    }
+
     return
+  }
+
+  if (currentState === "checkout" && currentAssignedUserId === parsedUserId) {
+    return
+  }
+
+  if (currentState === "checkout" && currentAssignedUserId !== parsedUserId) {
+    await axios.post(`${SNIPE_URL}/hardware/${assetId}/checkin`, {}, { headers: requestHeaders })
   }
 
   await axios.post(
@@ -513,12 +530,14 @@ app.post("/move", async (req, res) => {
 app.patch("/asset/:id", async (req, res) => {
   let payload = {}
   let assignedTo = undefined
+  let assignedToProvided = false
   let requestHeaders
 
   try {
     requestHeaders = await getUserHeaders(req)
     payload = await buildAssetPayload(req.params.id, req.body, requestHeaders)
     assignedTo = req.body.assigned_to
+    assignedToProvided = Object.prototype.hasOwnProperty.call(req.body, "assigned_to")
   } catch (e) {
     if (e.statusCode) {
       return res.status(e.statusCode).json({ error: e.message })
@@ -537,7 +556,7 @@ app.patch("/asset/:id", async (req, res) => {
   try {
     await axios.patch(`${SNIPE_URL}/hardware/${req.params.id}`, payload, { headers: requestHeaders })
 
-    if (assignedTo !== undefined && assignedTo !== null && assignedTo !== "") {
+    if (assignedToProvided) {
       await updateAssetAssignment(req.params.id, assignedTo, requestHeaders)
     }
 

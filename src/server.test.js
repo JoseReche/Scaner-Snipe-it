@@ -157,7 +157,7 @@ test('buildAssetPayload inclui company_id como inteiro', async () => {
   axios.get = originalGet
 })
 
-test('PATCH /asset/:id faz checkout quando assigned_to é enviado', async () => {
+test('PATCH /asset/:id identifica estado atual e faz checkin antes do checkout quando necessário', async () => {
   const originalGet = axios.get
   const originalPatch = axios.patch
   const originalPost = axios.post
@@ -190,10 +190,12 @@ test('PATCH /asset/:id faz checkout quando assigned_to é enviado', async () => 
 
     assert.equal(response.status, 200)
     assert.equal(data.success, true)
-    assert.equal(postRequests.length, 1)
-    assert.match(postRequests[0].url, /\/hardware\/10\/checkout$/)
-    assert.equal(postRequests[0].payload.checkout_to_type, 'user')
-    assert.equal(postRequests[0].payload.assigned_user, 22)
+    assert.equal(postRequests.length, 2)
+    assert.match(postRequests[0].url, /\/hardware\/10\/checkin$/)
+    assert.deepEqual(postRequests[0].payload, {})
+    assert.match(postRequests[1].url, /\/hardware\/10\/checkout$/)
+    assert.equal(postRequests[1].payload.checkout_to_type, 'user')
+    assert.equal(postRequests[1].payload.assigned_user, 22)
   } finally {
     server.close()
     axios.get = originalGet
@@ -244,6 +246,50 @@ test('PATCH /asset/:id aplica atualização e devolve ativo mapeado', async () =
     server.close()
     axios.get = originalGet
     axios.patch = originalPatch
+  }
+})
+
+test('PATCH /asset/:id com assigned_to vazio faz apenas checkin quando ativo está em checkout', async () => {
+  const originalGet = axios.get
+  const originalPatch = axios.patch
+  const originalPost = axios.post
+  const postRequests = []
+
+  axios.get = async (url) => {
+    if (url.endsWith('/hardware/10')) {
+      return { data: baseAsset }
+    }
+
+    throw new Error(`URL inesperada no GET: ${url}`)
+  }
+
+  axios.patch = async () => ({ data: { status: 'success' } })
+  axios.post = async (url, payload) => {
+    postRequests.push({ url, payload })
+    return { data: { status: 'success' } }
+  }
+
+  const server = app.listen(0)
+  const { port } = server.address()
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/asset/10`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', ...authHeader() },
+      body: JSON.stringify({ status_id: '7', assigned_to: '' })
+    })
+    const data = await response.json()
+
+    assert.equal(response.status, 200)
+    assert.equal(data.success, true)
+    assert.equal(postRequests.length, 1)
+    assert.match(postRequests[0].url, /\/hardware\/10\/checkin$/)
+    assert.deepEqual(postRequests[0].payload, {})
+  } finally {
+    server.close()
+    axios.get = originalGet
+    axios.patch = originalPatch
+    axios.post = originalPost
   }
 })
 
