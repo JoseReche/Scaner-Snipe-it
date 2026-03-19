@@ -142,20 +142,62 @@ test('buildAssetPayload usa db_column quando o custom field não expõe a propri
 
 
 
-test('buildAssetPayload inclui company_id e assigned_to como inteiros', async () => {
+test('buildAssetPayload inclui company_id como inteiro', async () => {
   const originalGet = axios.get
 
   axios.get = async () => ({ data: baseAsset })
 
   const payload = await buildAssetPayload(10, {
-    company_id: '11',
-    assigned_to: '22'
+    company_id: '11'
   })
 
   assert.equal(payload.company_id, 11)
-  assert.equal(payload.assigned_to, 22)
 
   axios.get = originalGet
+})
+
+test('PATCH /asset/:id faz checkout quando assigned_to é enviado', async () => {
+  const originalGet = axios.get
+  const originalPatch = axios.patch
+  const originalPost = axios.post
+  const postRequests = []
+
+  axios.get = async (url) => {
+    if (url.endsWith('/hardware/10')) {
+      return { data: baseAsset }
+    }
+
+    throw new Error(`URL inesperada no GET: ${url}`)
+  }
+
+  axios.patch = async () => ({ data: { status: 'success' } })
+  axios.post = async (url, payload) => {
+    postRequests.push({ url, payload })
+    return { data: { status: 'success' } }
+  }
+
+  const server = app.listen(0)
+  const { port } = server.address()
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/asset/10`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', ...authHeader() },
+      body: JSON.stringify({ status_id: '7', assigned_to: '22' })
+    })
+    const data = await response.json()
+
+    assert.equal(response.status, 200)
+    assert.equal(data.success, true)
+    assert.equal(postRequests.length, 1)
+    assert.match(postRequests[0].url, /\/hardware\/10\/checkout$/)
+    assert.equal(postRequests[0].payload.assigned_user, 22)
+  } finally {
+    server.close()
+    axios.get = originalGet
+    axios.patch = originalPatch
+    axios.post = originalPost
+  }
 })
 
 test('PATCH /asset/:id aplica atualização e devolve ativo mapeado', async () => {

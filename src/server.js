@@ -165,6 +165,24 @@ const parseIntegerField = (value) => {
   return parsed
 }
 
+const sortOptionsByName = (items) => items.sort((a, b) =>
+  String(a.name).localeCompare(String(b.name), "pt-BR", { numeric: true, sensitivity: "base" })
+)
+
+const updateAssetAssignment = async (assetId, assignedUserId, requestHeaders) => {
+  const parsedUserId = parseIntegerField(assignedUserId)
+
+  if (parsedUserId === undefined) {
+    return
+  }
+
+  await axios.post(
+    `${SNIPE_URL}/hardware/${assetId}/checkout`,
+    { assigned_user: parsedUserId },
+    { headers: requestHeaders }
+  )
+}
+
 const findPaCustomFieldKey = (asset) => {
   const entries = Object.entries(asset.custom_fields || {})
 
@@ -319,7 +337,7 @@ const buildClientError = (error, fallback) => {
 
 const buildAssetPayload = async (assetId, body, requestHeaders) => {
   const allowedTextFields = ["notes"]
-  const allowedIntegerFields = ["location_id", "rtd_location_id", "status_id", "model_id", "company_id", "assigned_to"]
+  const allowedIntegerFields = ["location_id", "rtd_location_id", "status_id", "model_id", "company_id"]
   const payload = {}
 
   for (const field of allowedTextFields) {
@@ -426,12 +444,18 @@ app.get("/options", async (req, res) => {
       fetchPaginatedRows("users", requestHeaders)
     ])
 
-    const statuses = statusRows.map((item) => ({ id: item.id, name: item.name })).filter((item) => item.id && item.name)
-    const locations = locationRows.map((item) => ({ id: item.id, name: item.name })).filter((item) => item.id && item.name)
-    const companies = companyRows.map((item) => ({ id: item.id, name: item.name })).filter((item) => item.id && item.name)
-    const users = userRows
+    const statuses = sortOptionsByName(statusRows
+      .map((item) => ({ id: item.id, name: item.name }))
+      .filter((item) => item.id && item.name))
+    const locations = sortOptionsByName(locationRows
+      .map((item) => ({ id: item.id, name: item.name }))
+      .filter((item) => item.id && item.name))
+    const companies = sortOptionsByName(companyRows
+      .map((item) => ({ id: item.id, name: item.name }))
+      .filter((item) => item.id && item.name))
+    const users = sortOptionsByName(userRows
       .map((item) => ({ id: item.id, name: item.name || item.username || item.email }))
-      .filter((item) => item.id && item.name)
+      .filter((item) => item.id && item.name))
 
     return res.json({ statuses, locations, companies, users })
   } catch (e) {
@@ -478,10 +502,13 @@ app.post("/move", async (req, res) => {
 
 app.patch("/asset/:id", async (req, res) => {
   let payload = {}
+  let assignedTo = undefined
+  let requestHeaders
 
   try {
-    const requestHeaders = await getUserHeaders(req)
+    requestHeaders = await getUserHeaders(req)
     payload = await buildAssetPayload(req.params.id, req.body, requestHeaders)
+    assignedTo = req.body.assigned_to
   } catch (e) {
     if (e.statusCode) {
       return res.status(e.statusCode).json({ error: e.message })
@@ -498,8 +525,12 @@ app.patch("/asset/:id", async (req, res) => {
   }
 
   try {
-    const requestHeaders = await getUserHeaders(req)
     await axios.patch(`${SNIPE_URL}/hardware/${req.params.id}`, payload, { headers: requestHeaders })
+
+    if (assignedTo !== undefined && assignedTo !== null && assignedTo !== "") {
+      await updateAssetAssignment(req.params.id, assignedTo, requestHeaders)
+    }
+
     const updatedAsset = await fetchAssetById(req.params.id, requestHeaders)
 
     return res.json({ success: true, asset: mapAsset(updatedAsset) })
