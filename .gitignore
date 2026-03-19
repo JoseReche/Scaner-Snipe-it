@@ -22,3 +22,15 @@ rad.json
 TestResults.xml
 # Node env files
 .env
+
+# Node modules
+node_modules/
+src/node_modules/
+
+# Runtime auth logs
+src/data/auth.log
+
+# SQLite auth database artifacts
+src/data/*.sqlite
+src/data/*.sqlite-shm
+src/data/*.sqlite-wal
