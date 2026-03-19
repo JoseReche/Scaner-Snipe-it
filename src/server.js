@@ -185,7 +185,10 @@ const updateAssetAssignment = async (assetId, assignedUserId, requestHeaders) =>
 
   await axios.post(
     `${SNIPE_URL}/hardware/${assetId}/checkout`,
-    { assigned_user: parsedUserId },
+    {
+      checkout_to_type: "user",
+      assigned_user: parsedUserId
+    },
     { headers: requestHeaders }
   )
 }
@@ -610,6 +613,7 @@ app.post("/checkout", async (req, res) => {
     await axios.post(
       `${SNIPE_URL}/hardware/${asset}/checkout`,
       {
+        checkout_to_type: "user",
         assigned_user: user
       },
       { headers: requestHeaders }

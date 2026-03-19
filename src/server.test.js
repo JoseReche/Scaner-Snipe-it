@@ -192,6 +192,7 @@ test('PATCH /asset/:id faz checkout quando assigned_to é enviado', async () => 
     assert.equal(data.success, true)
     assert.equal(postRequests.length, 1)
     assert.match(postRequests[0].url, /\/hardware\/10\/checkout$/)
+    assert.equal(postRequests[0].payload.checkout_to_type, 'user')
     assert.equal(postRequests[0].payload.assigned_user, 22)
   } finally {
     server.close()
