@@ -444,20 +444,15 @@ test('POST /home-office/termo envia PDF assinado para anexos do ativo', async ()
   }
 })
 
-test('POST /home-office/termo usa fallback para endpoint web quando /files falha', async () => {
+test('POST /home-office/termo retorna erro quando upload na API /files falha', async () => {
   const originalPost = axios.post
   const calls = []
 
   axios.post = async (url, payload) => {
     calls.push({ url, payload })
-
-    if (url.endsWith('/files')) {
-      const error = new Error('Falha no endpoint API')
-      error.response = { status: 404, data: { error: 'Not Found' } }
-      throw error
-    }
-
-    return { data: { status: 'success' } }
+    const error = new Error('Falha no endpoint API')
+    error.response = { status: 422, data: { messages: { file: ['The file field is required.'] } } }
+    throw error
   }
 
   const server = app.listen(0)
@@ -472,11 +467,10 @@ test('POST /home-office/termo usa fallback para endpoint web quando /files falha
 
     const data = await response.json()
 
-    assert.equal(response.status, 200)
-    assert.equal(data.success, true)
-    assert.equal(calls.length, 2)
+    assert.equal(response.status, 422)
+    assert.match(data.error, /Erro ao anexar termo no ativo/)
+    assert.equal(calls.length, 1)
     assert.match(calls[0].url, /\/hardware\/10\/files$/)
-    assert.match(calls[1].url, /\/hardware\/10\/upload$/)
   } finally {
     server.close()
     axios.post = originalPost
