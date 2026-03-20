@@ -84,6 +84,11 @@
           <button id="generatePdfButton" type="button" onclick="generateTermPdf()">Gerar PDF</button>
           <button id="uploadPdfButton" type="button" onclick="uploadGeneratedTermPdf()" disabled>Anexar PDF no ativo</button>
         </div>
+
+        <div id="pdfPreviewContainer" style="display:none;margin-top:14px;">
+          <label>Pré-visualização do PDF gerado</label>
+          <iframe id="pdfPreviewFrame" title="Pré-visualização do termo em PDF" style="width:100%;height:420px;border:1px solid #ccc;border-radius:6px;background:#fff;"></iframe>
+        </div>
       </div>
     </section>
   </div>
@@ -100,6 +105,7 @@ let lastScan = null
 let signaturePad = null
 let generatedTermPdfBlob = null
 let generatedTermPdfName = null
+let generatedTermPdfUrl = null
 
 const byId = (id) => document.getElementById(id)
 
@@ -166,6 +172,12 @@ async function loadAsset(assetId) {
   byId('manualAsset').value = data.id
   generatedTermPdfBlob = null
   generatedTermPdfName = null
+  if (generatedTermPdfUrl) {
+    URL.revokeObjectURL(generatedTermPdfUrl)
+    generatedTermPdfUrl = null
+  }
+  byId('pdfPreviewFrame').src = ''
+  byId('pdfPreviewContainer').style.display = 'none'
   byId('uploadPdfButton').disabled = true
   fillPanel(data)
 }
@@ -394,8 +406,14 @@ function generateTermPdf() {
 
     generatedTermPdfBlob = pdfBlob
     generatedTermPdfName = fileName
+    if (generatedTermPdfUrl) {
+      URL.revokeObjectURL(generatedTermPdfUrl)
+    }
+    generatedTermPdfUrl = URL.createObjectURL(pdfBlob)
+    byId('pdfPreviewFrame').src = generatedTermPdfUrl
+    byId('pdfPreviewContainer').style.display = 'block'
     byId('uploadPdfButton').disabled = false
-    alert('PDF gerado com sucesso. Agora clique em "Anexar PDF no ativo".')
+    alert('PDF gerado com sucesso e exibido na tela. Agora clique em "Anexar PDF no ativo".')
   } catch (error) {
     alert(`Erro ao gerar PDF: ${error.message}`)
   } finally {
