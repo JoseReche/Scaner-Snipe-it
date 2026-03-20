@@ -68,8 +68,26 @@
         <label>Nome do colaborador para assinatura</label>
         <input id="signerName" placeholder="Ex.: Maria Silva">
 
-        <label>Texto do termo de uso</label>
-        <textarea id="termText" rows="8" placeholder="Cole aqui o termo de uso de home office"></textarea>
+        <label>CPF</label>
+        <input id="signerCpf" placeholder="Ex.: 11441353976">
+
+        <label>Função</label>
+        <input id="signerRole" placeholder="Ex.: Auxiliar Administrativo">
+
+        <label>Data de início do home office</label>
+        <input id="homeOfficeStartDate" type="date">
+
+        <label>Cidade (assinatura)</label>
+        <input id="signatureCity" placeholder="Ex.: Joinville">
+
+        <label>Nº Patrimônio</label>
+        <input id="assetPatrimonio" placeholder="Ex.: NT013050">
+
+        <label>Headset (opcional)</label>
+        <input id="assetHeadset" placeholder="Ex.: SN-1234">
+
+        <label>Monitor (opcional)</label>
+        <input id="assetMonitor" placeholder="Ex.: SN-9988">
 
         <label>Assinatura</label>
         <canvas id="signatureCanvas" width="560" height="180" style="width:100%;border:1px solid #ccc;border-radius:6px;background:#fff;"></canvas>
@@ -297,15 +315,36 @@ async function generateAndUploadTermPdf() {
   }
 
   const signerName = byId('signerName').value.trim()
-  const termText = byId('termText').value.trim()
+  const signerCpf = byId('signerCpf').value.trim()
+  const signerRole = byId('signerRole').value.trim()
+  const homeOfficeStartDate = byId('homeOfficeStartDate').value
+  const signatureCity = byId('signatureCity').value.trim()
+  const assetPatrimonio = byId('assetPatrimonio').value.trim()
+  const assetHeadset = byId('assetHeadset').value.trim()
+  const assetMonitor = byId('assetMonitor').value.trim()
 
   if (!signerName) {
     alert('Informe o nome do colaborador para assinatura')
     return
   }
 
-  if (!termText) {
-    alert('Preencha o termo de uso antes de gerar o PDF')
+  if (!signerCpf) {
+    alert('Informe o CPF')
+    return
+  }
+
+  if (!signerRole) {
+    alert('Informe a função')
+    return
+  }
+
+  if (!homeOfficeStartDate) {
+    alert('Informe a data de início do home office')
+    return
+  }
+
+  if (!signatureCity) {
+    alert('Informe a cidade da assinatura')
     return
   }
 
@@ -324,29 +363,70 @@ async function generateAndUploadTermPdf() {
     const margin = 40
     let y = 60
 
+    const startDate = new Date(`${homeOfficeStartDate}T12:00:00`).toLocaleDateString('pt-BR')
+    const issuedAt = new Date().toLocaleDateString('pt-BR')
+
     pdf.setFontSize(14)
     pdf.text('Termo de Uso - Home Office', margin, y)
-    y += 30
+    y += 18
+    pdf.text('TERMO DE ENTREGA E CIÊNCIA', margin, y)
+    y += 18
+    pdf.text('TRABALHO REGIME HOME OFFICE', margin, y)
+    y += 28
+
     pdf.setFontSize(11)
+    const intro = `Eu ${signerName}, inscrito no CPF sob nº ${signerCpf}, integrante do quadro de colaboradores da empresa SCHULZE ADVOGADOS ASSOCIADOS, onde exerço a função de ${signerRole}, manifesto ciência e concordância de que, a partir do dia ${startDate} e até posterior orientação, realizarei o desempenho de minhas funções em minha residência, conforme carga horária e escalas habituais, em regime de trabalho home office.`
+    const sigilo = 'Comprometo-me a não divulgar, sem prévia, expressa e formal autorização do representante legal da empresa contratante, quaisquer informações de propriedade desta ou das instituições bancárias e seus demais clientes, respeitando tudo que disciplina o Regimento Interno da empresa e de segurança da informação e sigilo bancário, sob pena das penalidades já de conhecimento, como de praxe nas rotinas habituais.'
+    const comodato = 'Equipamentos recebidos e instalados em HOME, em regime de COMODATO, de propriedade da CONTRATANTE e que deverão ser restituídos à CONTRATANTE ao término do Projeto HOME:'
 
-    const lines = pdf.splitTextToSize(termText, 515)
-    pdf.text(lines, margin, y)
-    y += (lines.length * 14) + 24
+    const introLines = pdf.splitTextToSize(intro, 515)
+    pdf.text(introLines, margin, y)
+    y += (introLines.length * 14) + 12
 
-    if (y > 560) {
-      pdf.addPage()
-      y = 60
-    }
+    const sigiloLines = pdf.splitTextToSize(sigilo, 515)
+    pdf.text(sigiloLines, margin, y)
+    y += (sigiloLines.length * 14) + 12
 
-    pdf.text(`Assinante: ${signerName}`, margin, y)
-    y += 10
+    const comodatoLines = pdf.splitTextToSize(comodato, 515)
+    pdf.text(comodatoLines, margin, y)
+    y += (comodatoLines.length * 14) + 14
+
+    const itens = [
+      'a. Computador/Notebook',
+      'b. Monitor',
+      'c. Carregador',
+      'd. Teclado',
+      'e. Mouse',
+      'f. Headset + base',
+      'g. Cabos de Conexão de energia e rede',
+      'h. Régua de energia'
+    ]
+
+    itens.forEach((item) => {
+      pdf.text(`• ${item}`, margin + 8, y)
+      y += 14
+    })
+    y += 8
+
+    pdf.text(`Obs.: Nº Patrimônio: ${assetPatrimonio || '-'}`, margin, y)
+    y += 14
+    pdf.text(`Headset: ${assetHeadset || '-'}`, margin, y)
+    y += 14
+    pdf.text(`Monitor: ${assetMonitor || '-'}`, margin, y)
+    y += 24
+
+    const fechamento = 'Declaro ciência do meu dever em zelar pelos equipamentos recebidos e autorizo o desconto em folha de pagamento referentes a eventuais danos causados por mau uso, conforme descrito nos artigos 5º e 6º do Regimento Interno.'
+    const fechamentoLines = pdf.splitTextToSize(fechamento, 515)
+    pdf.text(fechamentoLines, margin, y)
+    y += (fechamentoLines.length * 14) + 24
 
     const signatureDataUrl = signaturePad.canvas.toDataURL('image/png')
     pdf.addImage(signatureDataUrl, 'PNG', margin, y, 280, 90)
     y += 110
 
-    const issuedAt = new Date().toLocaleString('pt-BR')
-    pdf.text(`Data/Hora: ${issuedAt}`, margin, y)
+    pdf.text(`Assinatura: ${signerName}`, margin, y)
+    y += 16
+    pdf.text(`${signatureCity}, ${issuedAt}`, margin, y)
 
     const pdfBase64 = pdf.output('datauristring').split(',')[1]
     const safeName = signerName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
