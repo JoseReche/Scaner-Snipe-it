@@ -103,6 +103,8 @@ Escaneie um ativo para visualizar e editar os dados.
 </div>
 </div>
 
+<div id="sideToast" class="side-toast" role="status" aria-live="polite"></div>
+
 <script src="/js/auth.js"></script>
 <script>
 
@@ -117,6 +119,7 @@ let optionsLoaded=false
 let scanner=null
 let scanning=false
 let lastScan=null
+let toastTimer=null
 
 const byId=(id)=>document.getElementById(id)
 
@@ -170,8 +173,30 @@ el.textContent=opt.id+" - "+opt.name
 select.appendChild(el)
 })
 
-if(selectedValue) select.value=selectedValue
+if(selectedValue!==undefined && selectedValue!==null && selectedValue!=="") select.value=String(selectedValue)
 
+}
+
+function sortOptionsAlphaNumeric(options){
+return [...options].sort((a,b)=>{
+const left=`${a?.id||""} ${a?.name||""}`
+const right=`${b?.id||""} ${b?.name||""}`
+return left.localeCompare(right,"pt-BR",{numeric:true,sensitivity:"base"})
+})
+}
+
+function showSideToast(message,type="success"){
+const toast=byId("sideToast")
+toast.textContent=message
+toast.className=`side-toast show ${type}`
+
+if(toastTimer){
+clearTimeout(toastTimer)
+}
+
+toastTimer=setTimeout(()=>{
+toast.classList.remove("show")
+},2800)
 }
 
 async function loadOptions(){
@@ -189,10 +214,10 @@ alert(data.error||"Falha ao carregar opções")
 return
 }
 
-statusOptions=data.statuses||[]
-locationOptions=data.locations||[]
-companyOptions=data.companies||[]
-userOptions=data.users||[]
+statusOptions=sortOptionsAlphaNumeric(data.statuses||[])
+locationOptions=sortOptionsAlphaNumeric(data.locations||[])
+companyOptions=sortOptionsAlphaNumeric(data.companies||[])
+userOptions=sortOptionsAlphaNumeric(data.users||[])
 
 fillSelect("editStatus",statusOptions,null,"Selecione")
 fillSelect("editLocation",locationOptions,null,"Selecione")
@@ -367,7 +392,7 @@ fillPanel(data.asset)
 btn.disabled=false
 btn.textContent="Salvar alterações"
 
-alert("Ativo atualizado")
+showSideToast("Ativo atualizado com sucesso")
 
 }
 
