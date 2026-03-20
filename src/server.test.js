@@ -441,8 +441,50 @@ test('POST /home-office/termo envia PDF assinado para anexos do ativo', async ()
     assert.equal(response.status, 200)
     assert.equal(data.success, true)
     assert.equal(calls.length, 1)
-    assert.match(calls[0].url, /\/hardware\/10\/files$/)
+    assert.match(calls[0].url, /\/hardware\/10\/upload$/)
     assert.equal(typeof calls[0].payload.append, 'function')
+  } finally {
+    server.close()
+    axios.post = originalPost
+  }
+})
+
+test('POST /home-office/termo usa fallback para endpoint de API quando /upload falha', async () => {
+  const originalPost = axios.post
+  const calls = []
+
+  axios.post = async (url, payload) => {
+    calls.push({ url, payload })
+
+    if (url.endsWith('/upload')) {
+      const error = new Error('Falha no endpoint web')
+      error.response = { status: 404, data: { error: 'Not Found' } }
+      throw error
+    }
+
+    return { data: { status: 'success' } }
+  }
+
+  const server = app.listen(0)
+  const { port } = server.address()
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/home-office/termo`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeader() },
+      body: JSON.stringify({
+        asset: 10,
+        pdf_base64: Buffer.from('%PDF-1.4 fallback').toString('base64')
+      })
+    })
+
+    const data = await response.json()
+
+    assert.equal(response.status, 200)
+    assert.equal(data.success, true)
+    assert.equal(calls.length, 2)
+    assert.match(calls[0].url, /\/hardware\/10\/upload$/)
+    assert.match(calls[1].url, /\/hardware\/10\/files$/)
   } finally {
     server.close()
     axios.post = originalPost

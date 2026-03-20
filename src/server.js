@@ -650,19 +650,49 @@ app.post("/home-office/termo", async (req, res) => {
 
   try {
     const requestHeaders = await getUserHeaders(req)
+    const snipeWebBaseUrl = SNIPE_URL.replace(/\/api\/v1\/?$/i, "")
     const uploadHeaders = {
       Authorization: requestHeaders.Authorization,
       Accept: "application/json"
     }
+    const uploadTargets = [
+      `${snipeWebBaseUrl}/hardware/${parsedAsset}/upload`,
+      `${SNIPE_URL}/hardware/${parsedAsset}/files`
+    ]
+    const createFormData = () => {
+      const formData = new FormData()
+      const blob = new Blob([pdfBuffer], { type: "application/pdf" })
 
-    const formData = new FormData()
-    formData.append("file", new Blob([pdfBuffer], { type: "application/pdf" }), safeFileName)
+      // Compatibilidade com o formulário Web e com o endpoint de API.
+      formData.append("upload_file", blob, safeFileName)
+      formData.append("file", blob, safeFileName)
 
-    if (note !== undefined && note !== null && String(note).trim() !== "") {
-      formData.append("notes", String(note))
+      if (note !== undefined && note !== null && String(note).trim() !== "") {
+        formData.append("notes", String(note))
+      }
+
+      return formData
     }
 
-    await axios.post(`${SNIPE_URL}/hardware/${parsedAsset}/files`, formData, { headers: uploadHeaders })
+    let lastError = null
+
+    for (const uploadUrl of uploadTargets) {
+      try {
+        await axios.post(uploadUrl, createFormData(), {
+          headers: uploadHeaders,
+          maxRedirects: 0,
+          validateStatus: (status) => (status >= 200 && status < 300) || status === 302
+        })
+        lastError = null
+        break
+      } catch (error) {
+        lastError = error
+      }
+    }
+
+    if (lastError) {
+      throw lastError
+    }
 
     return res.json({ success: true })
   } catch (e) {
