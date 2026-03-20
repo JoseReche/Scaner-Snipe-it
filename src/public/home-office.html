@@ -38,8 +38,8 @@
     </section>
 
     <section class="card">
-      <h3>Baixa do Kit</h3>
-      <div id="emptyState" class="small">Escaneie um ativo para preencher os dados de baixa.</div>
+      <h3>Formulário do Termo</h3>
+      <div id="emptyState" class="small">Escaneie um ativo para preencher os dados do termo.</div>
 
       <div id="assetPanel" style="display:none">
         <div class="info-grid">
@@ -48,18 +48,6 @@
           <div class="info-item"><b>Status:</b> <span id="view-status">-</span></div>
           <div class="info-item"><b>Atribuído:</b> <span id="view-assigned">-</span></div>
         </div>
-
-        <label>Status de baixa</label>
-        <select id="editStatus"></select>
-
-        <label>Observações</label>
-        <textarea id="editNotes" placeholder="Ex.: devolução de kit home office"></textarea>
-
-        <label style="display:flex;align-items:center;gap:8px;margin-top:12px;">
-          <input id="doCheckin" type="checkbox" style="width:auto;"> Realizar check-in antes da baixa
-        </label>
-
-        <button id="saveButton" onclick="saveBaixa()">Confirmar baixa</button>
 
         <hr style="margin:20px 0;">
         <h4 style="margin:0 0 12px 0;">Termo de uso + assinatura</h4>
@@ -108,7 +96,6 @@ let currentAssetId = null
 let scanner = null
 let scanning = false
 let lastScan = null
-let statusOptions = []
 let signaturePad = null
 
 const byId = (id) => document.getElementById(id)
@@ -148,43 +135,6 @@ function parseAssetId(raw) {
   return raw.trim()
 }
 
-function fillStatusOptions(selectedValue) {
-  const select = byId('editStatus')
-  select.innerHTML = ''
-
-  const empty = document.createElement('option')
-  empty.value = ''
-  empty.textContent = 'Selecione'
-  select.appendChild(empty)
-
-  statusOptions.forEach((item) => {
-    const opt = document.createElement('option')
-    opt.value = item.id
-    opt.textContent = `${item.id} - ${item.name}`
-    select.appendChild(opt)
-  })
-
-  if (selectedValue) select.value = selectedValue
-}
-
-async function loadStatusOptions() {
-  const res = await fetch('/options', { headers: authHeaders() })
-  const data = await res.json()
-
-  if (res.status === 401 && isAuthTokenError(data)) {
-    logout()
-    return
-  }
-
-  if (!res.ok) {
-    alert(data.error || 'Falha ao carregar status')
-    return
-  }
-
-  statusOptions = data.statuses || []
-  fillStatusOptions(null)
-}
-
 function fillPanel(asset) {
   byId('emptyState').style.display = 'none'
   byId('assetPanel').style.display = 'block'
@@ -193,9 +143,6 @@ function fillPanel(asset) {
   byId('view-pa').textContent = asset.pa || '-'
   byId('view-status').textContent = asset.status || '-'
   byId('view-assigned').textContent = asset.assignedTo || '-'
-
-  fillStatusOptions(asset.statusId)
-  byId('editNotes').value = asset.notes || ''
 }
 
 async function loadAsset(assetId) {
@@ -428,21 +375,22 @@ async function generateAndUploadTermPdf() {
     y += 16
     pdf.text(`${signatureCity}, ${issuedAt}`, margin, y)
 
-    const pdfBase64 = pdf.output('datauristring').split(',')[1]
+    const pdfBlob = pdf.output('blob')
     const safeName = signerName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
     const fileName = `termo-home-office-${safeName || 'assinatura'}-${currentAssetId}.pdf`
 
     button.textContent = 'Anexando PDF...'
 
-    const response = await fetch('/home-office/termo', {
+    const query = new URLSearchParams({
+      asset: String(currentAssetId),
+      file_name: fileName,
+      note: `Termo de uso home office assinado por ${signerName}`
+    })
+
+    const response = await fetch(`/home-office/termo?${query.toString()}`, {
       method: 'POST',
-      headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({
-        asset: currentAssetId,
-        file_name: fileName,
-        note: `Termo de uso home office assinado por ${signerName}`,
-        pdf_base64: pdfBase64
-      })
+      headers: authHeaders({ 'Content-Type': 'application/pdf' }),
+      body: pdfBlob
     })
 
     const rawBody = await response.text()
@@ -487,47 +435,6 @@ async function startScanner() {
   scanning = true
 }
 
-async function saveBaixa() {
-  if (!currentAssetId) return
-
-  const payload = {
-    asset: currentAssetId,
-    status_id: byId('editStatus').value,
-    notes: byId('editNotes').value,
-    do_checkin: byId('doCheckin').checked
-  }
-
-  const btn = byId('saveButton')
-  btn.disabled = true
-  btn.textContent = 'Salvando...'
-
-  const res = await fetch('/home-office/baixa', {
-    method: 'POST',
-    headers: authHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify(payload)
-  })
-
-  const data = await res.json()
-
-  if (res.status === 401 && isAuthTokenError(data)) {
-    logout()
-    return
-  }
-
-  if (!res.ok) {
-    alert(data.error || 'Falha na baixa do kit home office')
-    btn.disabled = false
-    btn.textContent = 'Confirmar baixa'
-    return
-  }
-
-  fillPanel(data.asset)
-  btn.disabled = false
-  btn.textContent = 'Confirmar baixa'
-  alert('Baixa do kit realizada com sucesso')
-}
-
-loadStatusOptions()
 setupSignaturePad()
 </script>
 </body>

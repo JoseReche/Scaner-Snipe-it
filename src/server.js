@@ -619,11 +619,11 @@ app.post("/home-office/baixa", async (req, res) => {
   }
 })
 
-app.post("/home-office/termo", async (req, res) => {
-  const { asset, file_name: fileName, note, pdf_base64: pdfBase64 } = req.body
+app.post("/home-office/termo", express.raw({ type: "application/pdf", limit: "10mb" }), async (req, res) => {
+  const { asset, file_name: fileName, note } = req.query
 
-  if (asset === undefined || asset === null || asset === "" || !pdfBase64) {
-    return res.status(400).json({ error: "Campos asset e pdf_base64 são obrigatórios" })
+  if (asset === undefined || asset === null || asset === "") {
+    return res.status(400).json({ error: "Campo asset é obrigatório" })
   }
 
   const parsedAsset = parseIntegerField(asset)
@@ -632,13 +632,7 @@ app.post("/home-office/termo", async (req, res) => {
     return res.status(400).json({ error: "asset deve ser um número válido" })
   }
 
-  let pdfBuffer
-
-  try {
-    pdfBuffer = Buffer.from(String(pdfBase64), "base64")
-  } catch (error) {
-    return res.status(400).json({ error: "pdf_base64 inválido" })
-  }
+  const pdfBuffer = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || "")
 
   if (!pdfBuffer || pdfBuffer.length === 0) {
     return res.status(400).json({ error: "O PDF gerado está vazio" })

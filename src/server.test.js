@@ -425,15 +425,10 @@ test('POST /home-office/termo envia PDF assinado para anexos do ativo', async ()
   const { port } = server.address()
 
   try {
-    const response = await fetch(`http://127.0.0.1:${port}/home-office/termo`, {
+    const response = await fetch(`http://127.0.0.1:${port}/home-office/termo?asset=10&file_name=termo-home-office.pdf&note=Termo%20assinado`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...authHeader() },
-      body: JSON.stringify({
-        asset: 10,
-        file_name: 'termo-home-office.pdf',
-        note: 'Termo assinado',
-        pdf_base64: Buffer.from('%PDF-1.4 teste').toString('base64')
-      })
+      headers: { 'Content-Type': 'application/pdf', ...authHeader() },
+      body: Buffer.from('%PDF-1.4 teste')
     })
 
     const data = await response.json()
@@ -469,13 +464,10 @@ test('POST /home-office/termo usa fallback para endpoint de API quando /upload f
   const { port } = server.address()
 
   try {
-    const response = await fetch(`http://127.0.0.1:${port}/home-office/termo`, {
+    const response = await fetch(`http://127.0.0.1:${port}/home-office/termo?asset=10`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', ...authHeader() },
-      body: JSON.stringify({
-        asset: 10,
-        pdf_base64: Buffer.from('%PDF-1.4 fallback').toString('base64')
-      })
+      headers: { 'Content-Type': 'application/pdf', ...authHeader() },
+      body: Buffer.from('%PDF-1.4 fallback')
     })
 
     const data = await response.json()
