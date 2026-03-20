@@ -81,7 +81,8 @@
         <canvas id="signatureCanvas" width="560" height="180" style="width:100%;border:1px solid #ccc;border-radius:6px;background:#fff;"></canvas>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
           <button type="button" onclick="clearSignature()">Limpar assinatura</button>
-          <button id="generateUploadButton" type="button" onclick="generateAndUploadTermPdf()">Gerar PDF e anexar no ativo</button>
+          <button id="generatePdfButton" type="button" onclick="generateTermPdf()">Gerar PDF</button>
+          <button id="uploadPdfButton" type="button" onclick="uploadGeneratedTermPdf()" disabled>Anexar PDF no ativo</button>
         </div>
       </div>
     </section>
@@ -97,6 +98,8 @@ let scanner = null
 let scanning = false
 let lastScan = null
 let signaturePad = null
+let generatedTermPdfBlob = null
+let generatedTermPdfName = null
 
 const byId = (id) => document.getElementById(id)
 
@@ -161,6 +164,9 @@ async function loadAsset(assetId) {
 
   currentAssetId = data.id
   byId('manualAsset').value = data.id
+  generatedTermPdfBlob = null
+  generatedTermPdfName = null
+  byId('uploadPdfButton').disabled = true
   fillPanel(data)
 }
 
@@ -255,7 +261,7 @@ function signatureHasInk() {
   return false
 }
 
-async function generateAndUploadTermPdf() {
+function generateTermPdf() {
   if (!currentAssetId) {
     alert('Primeiro selecione um ativo')
     return
@@ -300,9 +306,9 @@ async function generateAndUploadTermPdf() {
     return
   }
 
-  const button = byId('generateUploadButton')
-  button.disabled = true
-  button.textContent = 'Gerando PDF...'
+  const generateButton = byId('generatePdfButton')
+  generateButton.disabled = true
+  generateButton.textContent = 'Gerando PDF...'
 
   try {
     const { jsPDF } = window.jspdf
@@ -382,21 +388,49 @@ async function generateAndUploadTermPdf() {
       alert('O PDF gerado ultrapassa 2MB. Reduza o conteúdo antes de anexar.')
       return
     }
+
     const safeName = signerName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
     const fileName = `termo-home-office-${safeName || 'assinatura'}-${currentAssetId}.pdf`
 
-    button.textContent = 'Anexando PDF...'
+    generatedTermPdfBlob = pdfBlob
+    generatedTermPdfName = fileName
+    byId('uploadPdfButton').disabled = false
+    alert('PDF gerado com sucesso. Agora clique em "Anexar PDF no ativo".')
+  } catch (error) {
+    alert(`Erro ao gerar PDF: ${error.message}`)
+  } finally {
+    generateButton.disabled = false
+    generateButton.textContent = 'Gerar PDF'
+  }
+}
 
+async function uploadGeneratedTermPdf() {
+  if (!currentAssetId) {
+    alert('Primeiro selecione um ativo')
+    return
+  }
+
+  if (!generatedTermPdfBlob || !generatedTermPdfName) {
+    alert('Gere o PDF antes de anexar')
+    return
+  }
+
+  const uploadButton = byId('uploadPdfButton')
+  uploadButton.disabled = true
+  uploadButton.textContent = 'Anexando PDF...'
+
+  try {
+    const signerName = byId('signerName').value.trim()
     const query = new URLSearchParams({
       asset: String(currentAssetId),
-      file_name: fileName,
-      note: `Termo de uso home office assinado por ${signerName}`
+      file_name: generatedTermPdfName,
+      note: `Termo de uso home office assinado por ${signerName || 'colaborador'}`
     })
 
     const response = await fetch(`/home-office/termo?${query.toString()}`, {
       method: 'POST',
       headers: authHeaders({ 'Content-Type': 'application/pdf' }),
-      body: pdfBlob
+      body: generatedTermPdfBlob
     })
 
     const rawBody = await response.text()
@@ -418,12 +452,12 @@ async function generateAndUploadTermPdf() {
       return
     }
 
-    alert('PDF gerado e anexado com sucesso no ativo')
+    alert('PDF anexado com sucesso no ativo')
   } catch (error) {
-    alert(`Erro ao gerar/anexar PDF: ${error.message}`)
+    alert(`Erro ao anexar PDF: ${error.message}`)
   } finally {
-    button.disabled = false
-    button.textContent = 'Gerar PDF e anexar no ativo'
+    uploadButton.disabled = false
+    uploadButton.textContent = 'Anexar PDF no ativo'
   }
 }
 

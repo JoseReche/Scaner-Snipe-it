@@ -436,7 +436,7 @@ test('POST /home-office/termo envia PDF assinado para anexos do ativo', async ()
     assert.equal(response.status, 200)
     assert.equal(data.success, true)
     assert.equal(calls.length, 1)
-    assert.match(calls[0].url, /\/hardware\/10\/upload$/)
+    assert.match(calls[0].url, /\/hardware\/10\/files$/)
     assert.equal(typeof calls[0].payload.append, 'function')
   } finally {
     server.close()
@@ -444,15 +444,15 @@ test('POST /home-office/termo envia PDF assinado para anexos do ativo', async ()
   }
 })
 
-test('POST /home-office/termo usa fallback para endpoint de API quando /upload falha', async () => {
+test('POST /home-office/termo usa fallback para endpoint web quando /files falha', async () => {
   const originalPost = axios.post
   const calls = []
 
   axios.post = async (url, payload) => {
     calls.push({ url, payload })
 
-    if (url.endsWith('/upload')) {
-      const error = new Error('Falha no endpoint web')
+    if (url.endsWith('/files')) {
+      const error = new Error('Falha no endpoint API')
       error.response = { status: 404, data: { error: 'Not Found' } }
       throw error
     }
@@ -475,8 +475,8 @@ test('POST /home-office/termo usa fallback para endpoint de API quando /upload f
     assert.equal(response.status, 200)
     assert.equal(data.success, true)
     assert.equal(calls.length, 2)
-    assert.match(calls[0].url, /\/hardware\/10\/upload$/)
-    assert.match(calls[1].url, /\/hardware\/10\/files$/)
+    assert.match(calls[0].url, /\/hardware\/10\/files$/)
+    assert.match(calls[1].url, /\/hardware\/10\/upload$/)
   } finally {
     server.close()
     axios.post = originalPost

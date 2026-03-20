@@ -656,8 +656,8 @@ app.post("/home-office/termo", express.raw({ type: "application/pdf", limit: "10
       Accept: "application/json"
     }
     const uploadTargets = [
-      `${snipeWebBaseUrl}/hardware/${parsedAsset}/upload`,
-      `${SNIPE_URL}/hardware/${parsedAsset}/files`
+      `${SNIPE_URL}/hardware/${parsedAsset}/files`,
+      `${snipeWebBaseUrl}/hardware/${parsedAsset}/upload`
     ]
     const createFormData = () => {
       const formData = new FormData()
@@ -682,7 +682,7 @@ app.post("/home-office/termo", express.raw({ type: "application/pdf", limit: "10
         await axios.post(uploadUrl, createFormData(), {
           headers: uploadHeaders,
           maxRedirects: 0,
-          validateStatus: (status) => (status >= 200 && status < 300) || status === 302
+          validateStatus: (status) => status >= 200 && status < 300
         })
         lastError = null
         break
