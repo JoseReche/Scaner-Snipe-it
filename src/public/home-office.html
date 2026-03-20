@@ -376,6 +376,12 @@ async function generateAndUploadTermPdf() {
     pdf.text(`${signatureCity}, ${issuedAt}`, margin, y)
 
     const pdfBlob = pdf.output('blob')
+    const maxUploadSize = 2 * 1024 * 1024
+
+    if (pdfBlob.size > maxUploadSize) {
+      alert('O PDF gerado ultrapassa 2MB. Reduza o conteúdo antes de anexar.')
+      return
+    }
     const safeName = signerName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
     const fileName = `termo-home-office-${safeName || 'assinatura'}-${currentAssetId}.pdf`
 

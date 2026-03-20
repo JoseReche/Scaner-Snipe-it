@@ -483,6 +483,36 @@ test('POST /home-office/termo usa fallback para endpoint de API quando /upload f
   }
 })
 
+test('POST /home-office/termo bloqueia upload de PDF acima de 2MB', async () => {
+  const originalPost = axios.post
+  let called = false
+
+  axios.post = async () => {
+    called = true
+    return { data: { status: 'success' } }
+  }
+
+  const server = app.listen(0)
+  const { port } = server.address()
+
+  try {
+    const largePdf = Buffer.alloc((2 * 1024 * 1024) + 1, 0)
+    const response = await fetch(`http://127.0.0.1:${port}/home-office/termo?asset=10`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/pdf', ...authHeader() },
+      body: largePdf
+    })
+    const data = await response.json()
+
+    assert.equal(response.status, 413)
+    assert.match(data.error, /2MB/)
+    assert.equal(called, false)
+  } finally {
+    server.close()
+    axios.post = originalPost
+  }
+})
+
 test('POST /api/auth/register cria usuário e impede matrícula duplicada', async () => {
   const server = app.listen(0)
   const { port } = server.address()

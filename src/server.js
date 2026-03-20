@@ -638,6 +638,12 @@ app.post("/home-office/termo", express.raw({ type: "application/pdf", limit: "10
     return res.status(400).json({ error: "O PDF gerado está vazio" })
   }
 
+  const maxFileSize = 2 * 1024 * 1024
+
+  if (pdfBuffer.length > maxFileSize) {
+    return res.status(413).json({ error: "O arquivo PDF excede o limite de 2MB do Snipe-IT" })
+  }
+
   const safeFileName = typeof fileName === "string" && fileName.trim()
     ? fileName.trim()
     : `termo-home-office-${parsedAsset}.pdf`
@@ -658,6 +664,7 @@ app.post("/home-office/termo", express.raw({ type: "application/pdf", limit: "10
       const blob = new Blob([pdfBuffer], { type: "application/pdf" })
 
       // Compatibilidade com o formulário Web e com o endpoint de API.
+      formData.append("file[]", blob, safeFileName)
       formData.append("upload_file", blob, safeFileName)
       formData.append("file", blob, safeFileName)
 
