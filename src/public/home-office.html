@@ -6,6 +6,7 @@
 <title>Baixa de Kit Home Office</title>
 <link rel="stylesheet" href="/auth.css" />
 <script src="https://unpkg.com/html5-qrcode"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
 </head>
 <body>
 <div class="container">
@@ -59,6 +60,23 @@
         </label>
 
         <button id="saveButton" onclick="saveBaixa()">Confirmar baixa</button>
+
+        <hr style="margin:20px 0;">
+        <h4 style="margin:0 0 12px 0;">Termo de uso + assinatura</h4>
+        <p class="small" style="margin-top:0;">Gera um PDF com o termo e assinatura, e anexa no ativo.</p>
+
+        <label>Nome do colaborador para assinatura</label>
+        <input id="signerName" placeholder="Ex.: Maria Silva">
+
+        <label>Texto do termo de uso</label>
+        <textarea id="termText" rows="8" placeholder="Cole aqui o termo de uso de home office"></textarea>
+
+        <label>Assinatura</label>
+        <canvas id="signatureCanvas" width="560" height="180" style="width:100%;border:1px solid #ccc;border-radius:6px;background:#fff;"></canvas>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+          <button type="button" onclick="clearSignature()">Limpar assinatura</button>
+          <button id="generateUploadButton" type="button" onclick="generateAndUploadTermPdf()">Gerar PDF e anexar no ativo</button>
+        </div>
       </div>
     </section>
   </div>
@@ -73,6 +91,7 @@ let scanner = null
 let scanning = false
 let lastScan = null
 let statusOptions = []
+let signaturePad = null
 
 const byId = (id) => document.getElementById(id)
 
@@ -202,6 +221,171 @@ function onScanSuccess(decodedText) {
   loadAsset(id)
 }
 
+function setupSignaturePad() {
+  const canvas = byId('signatureCanvas')
+  const context = canvas.getContext('2d')
+  let drawing = false
+
+  const positionFromEvent = (event) => {
+    const rect = canvas.getBoundingClientRect()
+    const touch = event.touches?.[0]
+    const clientX = touch ? touch.clientX : event.clientX
+    const clientY = touch ? touch.clientY : event.clientY
+
+    return {
+      x: clientX - rect.left,
+      y: clientY - rect.top
+    }
+  }
+
+  const start = (event) => {
+    drawing = true
+    const position = positionFromEvent(event)
+    context.beginPath()
+    context.moveTo(position.x, position.y)
+    event.preventDefault()
+  }
+
+  const move = (event) => {
+    if (!drawing) return
+    const position = positionFromEvent(event)
+    context.lineWidth = 2
+    context.lineCap = 'round'
+    context.strokeStyle = '#111'
+    context.lineTo(position.x, position.y)
+    context.stroke()
+    event.preventDefault()
+  }
+
+  const stop = () => {
+    drawing = false
+  }
+
+  canvas.addEventListener('mousedown', start)
+  canvas.addEventListener('mousemove', move)
+  canvas.addEventListener('mouseup', stop)
+  canvas.addEventListener('mouseleave', stop)
+
+  canvas.addEventListener('touchstart', start, { passive: false })
+  canvas.addEventListener('touchmove', move, { passive: false })
+  canvas.addEventListener('touchend', stop)
+  canvas.addEventListener('touchcancel', stop)
+
+  signaturePad = { canvas, context }
+}
+
+function clearSignature() {
+  if (!signaturePad) return
+  signaturePad.context.clearRect(0, 0, signaturePad.canvas.width, signaturePad.canvas.height)
+}
+
+function signatureHasInk() {
+  if (!signaturePad) return false
+  const pixels = signaturePad.context.getImageData(0, 0, signaturePad.canvas.width, signaturePad.canvas.height).data
+
+  for (let index = 3; index < pixels.length; index += 4) {
+    if (pixels[index] !== 0) return true
+  }
+
+  return false
+}
+
+async function generateAndUploadTermPdf() {
+  if (!currentAssetId) {
+    alert('Primeiro selecione um ativo')
+    return
+  }
+
+  const signerName = byId('signerName').value.trim()
+  const termText = byId('termText').value.trim()
+
+  if (!signerName) {
+    alert('Informe o nome do colaborador para assinatura')
+    return
+  }
+
+  if (!termText) {
+    alert('Preencha o termo de uso antes de gerar o PDF')
+    return
+  }
+
+  if (!signatureHasInk()) {
+    alert('Faça a assinatura no campo antes de gerar o PDF')
+    return
+  }
+
+  const button = byId('generateUploadButton')
+  button.disabled = true
+  button.textContent = 'Gerando PDF...'
+
+  try {
+    const { jsPDF } = window.jspdf
+    const pdf = new jsPDF({ unit: 'pt', format: 'a4' })
+    const margin = 40
+    let y = 60
+
+    pdf.setFontSize(14)
+    pdf.text('Termo de Uso - Home Office', margin, y)
+    y += 30
+    pdf.setFontSize(11)
+
+    const lines = pdf.splitTextToSize(termText, 515)
+    pdf.text(lines, margin, y)
+    y += (lines.length * 14) + 24
+
+    if (y > 560) {
+      pdf.addPage()
+      y = 60
+    }
+
+    pdf.text(`Assinante: ${signerName}`, margin, y)
+    y += 10
+
+    const signatureDataUrl = signaturePad.canvas.toDataURL('image/png')
+    pdf.addImage(signatureDataUrl, 'PNG', margin, y, 280, 90)
+    y += 110
+
+    const issuedAt = new Date().toLocaleString('pt-BR')
+    pdf.text(`Data/Hora: ${issuedAt}`, margin, y)
+
+    const pdfBase64 = pdf.output('datauristring').split(',')[1]
+    const safeName = signerName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+    const fileName = `termo-home-office-${safeName || 'assinatura'}-${currentAssetId}.pdf`
+
+    button.textContent = 'Anexando PDF...'
+
+    const response = await fetch('/home-office/termo', {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({
+        asset: currentAssetId,
+        file_name: fileName,
+        note: `Termo de uso home office assinado por ${signerName}`,
+        pdf_base64: pdfBase64
+      })
+    })
+
+    const data = await response.json()
+
+    if (response.status === 401 && isAuthTokenError(data)) {
+      logout()
+      return
+    }
+
+    if (!response.ok) {
+      alert(data.error || 'Falha ao anexar termo no ativo')
+      return
+    }
+
+    alert('PDF gerado e anexado com sucesso no ativo')
+  } catch (error) {
+    alert(`Erro ao gerar/anexar PDF: ${error.message}`)
+  } finally {
+    button.disabled = false
+    button.textContent = 'Gerar PDF e anexar no ativo'
+  }
+}
+
 async function startScanner() {
   if (scanning) return
 
@@ -257,6 +441,7 @@ async function saveBaixa() {
 }
 
 loadStatusOptions()
+setupSignaturePad()
 </script>
 </body>
 </html>

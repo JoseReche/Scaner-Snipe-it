@@ -619,6 +619,62 @@ app.post("/home-office/baixa", async (req, res) => {
   }
 })
 
+app.post("/home-office/termo", async (req, res) => {
+  const { asset, file_name: fileName, note, pdf_base64: pdfBase64 } = req.body
+
+  if (asset === undefined || asset === null || asset === "" || !pdfBase64) {
+    return res.status(400).json({ error: "Campos asset e pdf_base64 são obrigatórios" })
+  }
+
+  const parsedAsset = parseIntegerField(asset)
+
+  if (parsedAsset === undefined) {
+    return res.status(400).json({ error: "asset deve ser um número válido" })
+  }
+
+  let pdfBuffer
+
+  try {
+    pdfBuffer = Buffer.from(String(pdfBase64), "base64")
+  } catch (error) {
+    return res.status(400).json({ error: "pdf_base64 inválido" })
+  }
+
+  if (!pdfBuffer || pdfBuffer.length === 0) {
+    return res.status(400).json({ error: "O PDF gerado está vazio" })
+  }
+
+  const safeFileName = typeof fileName === "string" && fileName.trim()
+    ? fileName.trim()
+    : `termo-home-office-${parsedAsset}.pdf`
+
+  try {
+    const requestHeaders = await getUserHeaders(req)
+    const uploadHeaders = {
+      Authorization: requestHeaders.Authorization,
+      Accept: "application/json"
+    }
+
+    const formData = new FormData()
+    formData.append("file", new Blob([pdfBuffer], { type: "application/pdf" }), safeFileName)
+
+    if (note !== undefined && note !== null && String(note).trim() !== "") {
+      formData.append("notes", String(note))
+    }
+
+    await axios.post(`${SNIPE_URL}/hardware/${parsedAsset}/files`, formData, { headers: uploadHeaders })
+
+    return res.json({ success: true })
+  } catch (e) {
+    if (e.statusCode) {
+      return res.status(e.statusCode).json({ error: e.message })
+    }
+
+    logApiError("POST /home-office/termo", e)
+    return res.status(getErrorStatusCode(e)).json(buildClientError(e, "Erro ao anexar termo no ativo"))
+  }
+})
+
 app.post("/checkout", async (req, res) => {
   const { asset, user } = req.body
 
