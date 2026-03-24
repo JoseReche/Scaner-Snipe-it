@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Retorno Home Office</title>
 <link rel="stylesheet" href="/auth.css" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 <script src="https://unpkg.com/html5-qrcode"></script>
 </head>
 <body>
@@ -14,11 +15,11 @@
     <div class="menu-wrapper">
       <button id="menu-toggle" class="menu-toggle" type="button" aria-label="Abrir menu">☰</button>
       <nav id="menu-panel" class="menu-panel" aria-label="Navegação principal">
-        <a href="/scanner">Scanner</a>
-        <a href="/scanner-pa">Scanner PA</a>
-        <a href="/home-office">Baixa Home Office</a>
-        <a href="/retorno-home-office">Retorno Home Office</a>
         <a href="/usuario">Usuário</a>
+        <a href="/scanner-pa">Scanner PA</a>
+        <a href="/scanner">Scanner Completo</a>
+        <a href="/home-office">Baixa Home</a>
+        <a href="/retorno-home-office">Retorno Home</a>
         <a href="/dashboard">Dashboard</a>
         <a href="#" onclick="logout(event)">Sair</a>
       </nav>
@@ -207,17 +208,18 @@ async function loadAsset(assetId) {
   return data
 }
 
-function loadAssetFromInput() {
+async function loadAssetFromInput() {
   const id = parseAssetId(byId('manualAsset').value)
   if (!id) return
-  loadAsset(id).then(async (asset) => {
-    if (!asset?.id) return
-    const updated = await applyQuickReturnUpdate(asset.id)
-    if (!updated) return
-    await loadAsset(asset.id)
-    await loadHomeOfficeAssets()
-    alert('Ativo categorizado automaticamente para retorno.')
-  })
+  const asset = await loadAsset(id)
+  if (!asset?.id) return
+
+  const updated = await applyQuickReturnUpdate(asset.id)
+  if (!updated) return
+
+  await loadAsset(asset.id)
+  await loadHomeOfficeAssets()
+  alert('Ativo categorizado automaticamente para retorno.')
 }
 
 async function onScanSuccess(decodedText) {

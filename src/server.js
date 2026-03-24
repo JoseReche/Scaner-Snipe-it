@@ -154,12 +154,17 @@ const getLatestUpload = (asset) => {
   return {
     id: latestUpload.id ?? null,
     name: latestUpload.display_name || latestUpload.filename || latestUpload.name || "Documento anexado",
-    url: latestUpload.url || latestUpload.file_path || null,
+    url: buildAbsoluteSnipeUrl(latestUpload.url || latestUpload.file_path || null),
     createdAt: latestUpload.created_at?.datetime || latestUpload.created_at || null
   }
 }
 
 const buildSnipeAssetWebUrl = (assetId) => `${SNIPE_WEB_BASE_URL}/hardware/${assetId}`
+const buildAbsoluteSnipeUrl = (rawUrl) => {
+  if (!rawUrl) return null
+  if (/^https?:\/\//i.test(rawUrl)) return rawUrl
+  return `${SNIPE_WEB_BASE_URL}${rawUrl.startsWith("/") ? "" : "/"}${rawUrl}`
+}
 
 const fetchAssetById = async (id, requestHeaders) => {
   const response = await axios.get(`${SNIPE_URL}/hardware/${id}`, { headers: requestHeaders })
@@ -659,7 +664,7 @@ app.get("/home-office/retorno-assets", async (req, res) => {
     const homeOfficeUser = users.find((user) => {
       const userName = String(user.name || user.username || "").trim().toLowerCase()
 
-      return userName === "home office"
+      return userName === "home office" || userName.includes("home office")
     })
 
     if (!homeOfficeUser?.id) {

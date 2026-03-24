@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Scanner de Ativos Snipe-IT</title>
 <link rel="stylesheet" href="/auth.css" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
 <script src="https://unpkg.com/html5-qrcode"></script>
 
@@ -19,10 +20,11 @@
 <div class="menu-wrapper">
 <button id="menu-toggle" class="menu-toggle" type="button" aria-label="Abrir menu">☰</button>
 <nav id="menu-panel" class="menu-panel" aria-label="Navegação principal">
-<a href="/scanner">Scanner</a>
-<a href="/scanner-pa">Scanner PA</a>
-<a href="/home-office">Baixa Home Office</a>
 <a href="/usuario">Usuário</a>
+<a href="/scanner-pa">Scanner PA</a>
+<a href="/scanner">Scanner Completo</a>
+<a href="/home-office">Baixa Home</a>
+<a href="/retorno-home-office">Retorno Home</a>
 <a href="/dashboard">Dashboard</a>
 <a href="#" onclick="logout(event)">Sair</a>
 </nav>
@@ -77,19 +79,29 @@ Escaneie um ativo para visualizar e editar os dados.
 <input id="editPA" type="number" inputmode="numeric">
 
 <label>Status</label>
-<select id="editStatus"></select>
+<input id="editStatusSearch" list="editStatusList" placeholder="Digite para buscar status">
+<datalist id="editStatusList"></datalist>
+<input id="editStatus" type="hidden">
 
 <label>Local</label>
-<select id="editLocation"></select>
+<input id="editLocationSearch" list="editLocationList" placeholder="Digite para buscar local">
+<datalist id="editLocationList"></datalist>
+<input id="editLocation" type="hidden">
 
 <label>Local Padrão</label>
-<select id="editRTD"></select>
+<input id="editRTDSearch" list="editRTDList" placeholder="Digite para buscar local padrão">
+<datalist id="editRTDList"></datalist>
+<input id="editRTD" type="hidden">
 
 <label>Empresa</label>
-<select id="editCompany"></select>
+<input id="editCompanySearch" list="editCompanyList" placeholder="Digite para buscar empresa">
+<datalist id="editCompanyList"></datalist>
+<input id="editCompany" type="hidden">
 
 <label>Atribuído para</label>
-<select id="editAssignedTo"></select>
+<input id="editAssignedToSearch" list="editAssignedToList" placeholder="Digite para buscar usuário">
+<datalist id="editAssignedToList"></datalist>
+<input id="editAssignedTo" type="hidden">
 
 <label>Notas</label>
 <textarea id="editNotes"></textarea>
@@ -120,6 +132,7 @@ let scanner=null
 let scanning=false
 let lastScan=null
 let toastTimer=null
+const searchableOptionMaps={}
 
 const byId=(id)=>document.getElementById(id)
 
@@ -156,25 +169,56 @@ return message.includes("token inválido") || message.includes("token ausente") 
 }
 
 
-function fillSelect(selectId,options,selectedValue,placeholder){
+function setupSearchableList(fieldId,listId,inputId,options,selectedValue,placeholder){
+const datalist=byId(listId)
+const searchInput=byId(inputId)
+const hiddenValueInput=byId(fieldId)
 
-const select=byId(selectId)
-select.innerHTML=""
+datalist.innerHTML=""
+searchableOptionMaps[fieldId]={}
 
-const empty=document.createElement("option")
-empty.value=""
-empty.textContent=placeholder
-select.appendChild(empty)
+if(placeholder){
+searchInput.placeholder=placeholder
+}
 
-options.forEach(opt=>{
+options.forEach((opt)=>{
+const optionLabel=`${opt.id} - ${opt.name}`
 const el=document.createElement("option")
-el.value=opt.id
-el.textContent=opt.id+" - "+opt.name
-select.appendChild(el)
+el.value=optionLabel
+datalist.appendChild(el)
+searchableOptionMaps[fieldId][optionLabel]=String(opt.id)
 })
 
-if(selectedValue!==undefined && selectedValue!==null && selectedValue!=="") select.value=String(selectedValue)
+if(selectedValue!==undefined && selectedValue!==null && selectedValue!==""){
+const selected=options.find((opt)=>String(opt.id)===String(selectedValue))
+if(selected){
+searchInput.value=`${selected.id} - ${selected.name}`
+hiddenValueInput.value=String(selected.id)
+return
+}
+}
 
+searchInput.value=""
+hiddenValueInput.value=""
+}
+
+function bindSearchableList(fieldId,inputId){
+const searchInput=byId(inputId)
+const hiddenValueInput=byId(fieldId)
+
+searchInput.addEventListener("input",()=>{
+const currentValue=(searchInput.value||"").toLowerCase().trim()
+const optionsMap=searchableOptionMaps[fieldId]||{}
+const exactMatch=optionsMap[searchInput.value]
+
+if(exactMatch){
+hiddenValueInput.value=exactMatch
+return
+}
+
+const partialMatches=Object.entries(optionsMap).filter(([label])=>label.toLowerCase().includes(currentValue))
+hiddenValueInput.value=partialMatches.length===1 ? partialMatches[0][1] : ""
+})
 }
 
 function sortOptionsAlphaNumeric(options){
@@ -219,11 +263,11 @@ locationOptions=sortOptionsAlphaNumeric(data.locations||[])
 companyOptions=sortOptionsAlphaNumeric(data.companies||[])
 userOptions=sortOptionsAlphaNumeric(data.users||[])
 
-fillSelect("editStatus",statusOptions,null,"Selecione")
-fillSelect("editLocation",locationOptions,null,"Selecione")
-fillSelect("editRTD",locationOptions,null,"Selecione")
-fillSelect("editCompany",companyOptions,null,"Selecione")
-fillSelect("editAssignedTo",userOptions,null,"Selecione")
+setupSearchableList("editStatus","editStatusList","editStatusSearch",statusOptions,null,"Digite para buscar status")
+setupSearchableList("editLocation","editLocationList","editLocationSearch",locationOptions,null,"Digite para buscar local")
+setupSearchableList("editRTD","editRTDList","editRTDSearch",locationOptions,null,"Digite para buscar local padrão")
+setupSearchableList("editCompany","editCompanyList","editCompanySearch",companyOptions,null,"Digite para buscar empresa")
+setupSearchableList("editAssignedTo","editAssignedToList","editAssignedToSearch",userOptions,null,"Digite para buscar usuário")
 optionsLoaded=true
 
 }
@@ -268,11 +312,11 @@ byId("view-mac").textContent=asset.customFields?.["MAC Address"]||"-"
 byId("editPA").value=asset.customFields?.PA||""
 byId("editNotes").value=asset.notes||""
 
-fillSelect("editStatus",statusOptions,asset.statusId,"Selecione")
-fillSelect("editLocation",locationOptions,asset.locationId,"Selecione")
-fillSelect("editRTD",locationOptions,asset.rtdLocationId,"Selecione")
-fillSelect("editCompany",companyOptions,asset.companyId,"Selecione")
-fillSelect("editAssignedTo",userOptions,asset.assignedToId,"Selecione")
+setupSearchableList("editStatus","editStatusList","editStatusSearch",statusOptions,asset.statusId,"Digite para buscar status")
+setupSearchableList("editLocation","editLocationList","editLocationSearch",locationOptions,asset.locationId,"Digite para buscar local")
+setupSearchableList("editRTD","editRTDList","editRTDSearch",locationOptions,asset.rtdLocationId,"Digite para buscar local padrão")
+setupSearchableList("editCompany","editCompanyList","editCompanySearch",companyOptions,asset.companyId,"Digite para buscar empresa")
+setupSearchableList("editAssignedTo","editAssignedToList","editAssignedToSearch",userOptions,asset.assignedToId,"Digite para buscar usuário")
 
 }
 
@@ -395,6 +439,12 @@ btn.textContent="Salvar alterações"
 showSideToast("Ativo atualizado com sucesso")
 
 }
+
+bindSearchableList("editStatus","editStatusSearch")
+bindSearchableList("editLocation","editLocationSearch")
+bindSearchableList("editRTD","editRTDSearch")
+bindSearchableList("editCompany","editCompanySearch")
+bindSearchableList("editAssignedTo","editAssignedToSearch")
 
 </script>
 
