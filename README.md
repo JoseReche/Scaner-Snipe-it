@@ -82,6 +82,26 @@ npm test
 npm start
 ```
 
+## Build frontend com Vite (container HTTP simples)
+
+Para gerar o compilado estático:
+
+```bash
+cd src
+npm run build:vite
+```
+
+O artefato será criado em `dist-vite/` (raiz do repositório).
+
+Para subir em container HTTP simples (Nginx), utilize:
+
+```bash
+docker build -f Dockerfile.vite -t scaner-snipe-vite .
+docker run --rm -p 8080:8080 scaner-snipe-vite
+```
+
+> Importante: este container serve apenas o frontend estático. As chamadas `/api/*` precisam apontar para o backend Express em execução.
+
 ## Testes automatizados
 
 Os testes são executados com o runner nativo do Node (`node --test`) via `npm test` dentro de `src/`.

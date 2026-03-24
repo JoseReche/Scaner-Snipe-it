@@ -56,6 +56,26 @@ npm start
 
 A aplicação abrirá na porta definida por `PORT` (padrão: `3000`).
 
+## 5.1) Gerar compilado Vite (frontend estático)
+
+```bash
+cd src
+npm run build:vite
+```
+
+Saída: `dist-vite/` na raiz do repositório.
+
+## 5.2) Rodar em container HTTP simples (Nginx)
+
+```bash
+docker build -f Dockerfile.vite -t scaner-snipe-vite .
+docker run --rm -p 8080:8080 scaner-snipe-vite
+```
+
+Abra: `http://localhost:8080/login`.
+
+> Observação: esse container expõe apenas o frontend. O backend (`/api`) precisa estar acessível separadamente.
+
 ## 6) Endpoints principais
 
 ### Auth

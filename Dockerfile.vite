@@ -1,0 +1,15 @@
+FROM node:20-alpine AS builder
+WORKDIR /app
+
+COPY src/package*.json ./src/
+RUN cd src && npm ci
+
+COPY . .
+RUN cd src && npm run build:vite
+
+FROM nginx:1.27-alpine
+COPY deploy/nginx.vite.conf /etc/nginx/conf.d/default.conf
+COPY --from=builder /app/dist-vite /usr/share/nginx/html
+
+EXPOSE 8080
+CMD ["nginx", "-g", "daemon off;"]

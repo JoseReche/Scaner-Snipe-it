@@ -6,7 +6,9 @@
   "scripts": {
     "start": "npm run check && node server.js",
     "check": "node --check server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "build:vite": "vite build --config vite.config.js && node scripts/copy-vite-runtime.js",
+    "preview:vite": "vite preview --config vite.config.js --port 4173"
   },
   "keywords": [
     "snipe-it",
@@ -25,6 +27,7 @@
     "express-validator": "^7.2.0",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
-    "sqlite3": "^5.1.7"
+    "sqlite3": "^5.1.7",
+    "vite": "^7.1.0"
   }
 }

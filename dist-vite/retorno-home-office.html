@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Retorno Home Office</title>
+<link rel="icon" type="image/svg+xml" href="/assets/favicon-DsvQLawI.svg" />
+<script src="https://unpkg.com/html5-qrcode"></script>
+  <link rel="stylesheet" crossorigin href="/assets/auth-Bfi8Xzyp.css">
+</head>
+<body>
+<div class="container">
+  <div class="topbar">
+    <h3>Retorno Home Office</h3>
+    <div class="menu-wrapper">
+      <button id="menu-toggle" class="menu-toggle" type="button" aria-label="Abrir menu">☰</button>
+      <nav id="menu-panel" class="menu-panel" aria-label="Navegação principal">
+        <a href="/usuario">Usuário</a>
+        <a href="/scanner-pa">Scanner PA</a>
+        <a href="/scanner">Scanner Completo</a>
+        <a href="/home-office">Baixa Home</a>
+        <a href="/retorno-home-office">Retorno Home</a>
+        <a href="/dashboard">Dashboard</a>
+        <a href="#" onclick="logout(event)">Sair</a>
+      </nav>
+    </div>
+  </div>
+
+  <div class="grid scanner-grid">
+    <section class="card">
+      <h3>Leitura do ativo</h3>
+      <button id="startScanBtn" class="scan-button" onclick="startScanner()">📷 ESCANEAR QR CODE</button>
+      <div id="reader" style="display:none"></div>
+
+      <p class="small">Você também pode digitar manualmente o ID do ativo.</p>
+      <label>ID do ativo</label>
+      <input id="manualAsset" placeholder="Ex.: 2170">
+      <button onclick="loadAssetFromInput()">Buscar ativo</button>
+
+      <div style="margin-top:14px;">
+        <label>Ativo lido</label>
+        <div id="assetLookupResult" class="small">Nenhum ativo consultado.</div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h3>Ativos em Home Office</h3>
+      <p class="small">Lista automática de ativos vinculados ao usuário <b>Home Office</b>.</p>
+
+      <div class="info-grid" style="margin-bottom:12px;">
+        <div class="info-item"><b>Usuário:</b> <span id="homeOfficeUserName">-</span></div>
+        <div class="info-item"><b>Total de ativos:</b> <span id="homeOfficeAssetsTotal">0</span></div>
+      </div>
+
+      <button type="button" onclick="loadHomeOfficeAssets()">Atualizar lista</button>
+
+      <div id="homeOfficeAssetsList" style="margin-top:12px;display:grid;gap:8px;"></div>
+    </section>
+  </div>
+</div>
+
+<script src="/js/auth.js"></script>
+<script>
+requireAuthToken()
+
+let scanner = null
+let scanning = false
+let lastScan = null
+const QUICK_RETURN_PAYLOAD = {
+  pa: '0',
+  status_id: '2',
+  location_id: '93',
+  rtd_location_id: '93',
+  company_id: '2',
+  assigned_to: '73',
+  notes: 'Retorno Home'
+}
+
+const byId = (id) => document.getElementById(id)
+const menuToggle = byId('menu-toggle')
+const menuPanel = byId('menu-panel')
+
+menuToggle.addEventListener('click', () => {
+  menuPanel.classList.toggle('open')
+})
+
+document.addEventListener('click', (event) => {
+  if (!menuPanel.contains(event.target) && !menuToggle.contains(event.target)) {
+    menuPanel.classList.remove('open')
+  }
+})
+
+const authHeaders = (extra = {}) => ({
+  ...extra,
+  Authorization: `Bearer ${getJwtToken()}`
+})
+
+function logout(event) {
+  if (event) event.preventDefault()
+  clearJwtToken()
+  window.location.href = '/login'
+}
+
+function isAuthTokenError(data) {
+  const message = (data?.error || '').toLowerCase()
+  return message.includes('token inválido') || message.includes('token ausente') || message.includes('token expirado')
+}
+
+function parseAssetId(raw) {
+  if (!raw) return null
+  if (raw.includes('hardware/')) return raw.split('hardware/')[1].trim()
+  return raw.trim()
+}
+
+function renderAssetsList(assets) {
+  const listEl = byId('homeOfficeAssetsList')
+
+  if (!Array.isArray(assets) || assets.length === 0) {
+    listEl.innerHTML = '<div class="small">Nenhum ativo vinculado ao usuário Home Office.</div>'
+    return
+  }
+
+  listEl.innerHTML = assets.map((asset) => `
+    <div class="info-item" style="border:1px solid rgba(255,255,255,.14);padding:10px;border-radius:8px;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;">
+        <div><b>ID:</b> ${asset.id || '-'}</div>
+        <div><b>PA:</b> ${asset.pa || '-'}</div>
+        <div><b>Nome:</b> ${asset.name || '-'}</div>
+        <div><b>Patrimônio:</b> ${asset.assetTag || '-'}</div>
+        <div><b>Status:</b> ${asset.status || '-'}</div>
+        <div><b>Local:</b> ${asset.location || '-'}</div>
+      </div>
+      <div style="margin-top:8px;">
+        <b>Último documento:</b>
+        ${asset.latestUpload?.url
+    ? `<a href="${asset.latestUpload.url}" target="_blank" rel="noopener noreferrer">${asset.latestUpload.name || 'Abrir documento'}</a>`
+    : (asset.latestUpload?.name || 'Não encontrado')}
+      </div>
+      <div style="margin-top:6px;">
+        <a href="${asset.snipeUrl || '#'}" target="_blank" rel="noopener noreferrer">Ver ativo completo no Snipe-IT</a>
+      </div>
+    </div>
+  `).join('')
+}
+
+async function applyQuickReturnUpdate(assetId) {
+  const response = await fetch(`/asset/${assetId}`, {
+    method: 'PATCH',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(QUICK_RETURN_PAYLOAD)
+  })
+  const data = await response.json()
+
+  if (response.status === 401 && isAuthTokenError(data)) {
+    logout()
+    return false
+  }
+
+  if (!response.ok) {
+    alert(data.error || 'Falha ao atualizar ativo para retorno')
+    return false
+  }
+
+  return true
+}
+
+async function loadHomeOfficeAssets() {
+  const response = await fetch('/home-office/retorno-assets', { headers: authHeaders() })
+  const data = await response.json()
+
+  if (response.status === 401 && isAuthTokenError(data)) {
+    logout()
+    return
+  }
+
+  if (!response.ok) {
+    alert(data.error || 'Falha ao carregar ativos de Home Office')
+    return
+  }
+
+  byId('homeOfficeUserName').textContent = data.user?.name || 'Home Office'
+  byId('homeOfficeAssetsTotal').textContent = String(data.total || 0)
+  renderAssetsList(data.assets || [])
+}
+
+async function loadAsset(assetId) {
+  const response = await fetch('/asset/' + assetId, { headers: authHeaders() })
+  const data = await response.json()
+
+  if (response.status === 401 && isAuthTokenError(data)) {
+    logout()
+    return
+  }
+
+  if (!response.ok) {
+    alert(data.error || 'Falha ao buscar ativo')
+    return
+  }
+
+  byId('manualAsset').value = data.id
+  byId('assetLookupResult').innerHTML = `
+    <b>ID:</b> ${data.id || '-'}<br>
+    <b>Nome:</b> ${data.name || '-'}<br>
+    <b>Status:</b> ${data.status || '-'}<br>
+    <b>Atribuído:</b> ${data.assignedTo || '-'}
+  `
+
+  return data
+}
+
+async function loadAssetFromInput() {
+  const id = parseAssetId(byId('manualAsset').value)
+  if (!id) return
+  const asset = await loadAsset(id)
+  if (!asset?.id) return
+
+  const updated = await applyQuickReturnUpdate(asset.id)
+  if (!updated) return
+
+  await loadAsset(asset.id)
+  await loadHomeOfficeAssets()
+  alert('Ativo categorizado automaticamente para retorno.')
+}
+
+async function onScanSuccess(decodedText) {
+  const id = parseAssetId(decodedText)
+
+  if (!id || id === lastScan) return
+  lastScan = id
+
+  if (navigator.vibrate) navigator.vibrate(120)
+
+  document.body.classList.add('scan-success')
+  setTimeout(() => {
+    document.body.classList.remove('scan-success')
+  }, 500)
+
+  const asset = await loadAsset(id)
+  if (!asset?.id) return
+
+  const updated = await applyQuickReturnUpdate(asset.id)
+  if (!updated) return
+
+  await loadAsset(asset.id)
+  await loadHomeOfficeAssets()
+  alert('Ativo categorizado automaticamente para retorno.')
+}
+
+async function startScanner() {
+  if (scanning) return
+
+  byId('reader').style.display = 'block'
+
+  scanner = new Html5QrcodeScanner('reader', {
+    fps: 10,
+    qrbox: { width: 220, height: 220 }
+  })
+
+  scanner.render(onScanSuccess)
+  scanning = true
+}
+
+loadHomeOfficeAssets()
+</script>
+</body>
+</html>

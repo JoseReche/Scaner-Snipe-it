@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Login Seguro</title>
+<link rel="icon" type="image/svg+xml" href="/assets/favicon-DsvQLawI.svg" />
+    <link rel="stylesheet" crossorigin href="/assets/auth-Bfi8Xzyp.css">
+  </head>
+  <body>
+    <div class="container">
+      <div class="topbar">
+        <h3>Scaner Snipe-IT</h3>
+        <a href="/scanner">Voltar ao scanner</a>
+      </div>
+
+      <div class="grid">
+        <section class="card">
+          <h1>Entrar</h1>
+          <p class="small">Use sua matrícula e senha para acessar as funcionalidades protegidas.</p>
+
+          <form id="login-form">
+            <label for="matricula">Matrícula</label>
+            <input id="matricula" name="matricula" required />
+
+            <label for="password">Senha</label>
+            <input id="password" name="password" type="password" required />
+
+            <div class="actions">
+              <button type="submit">Fazer login</button>
+            </div>
+          </form>
+
+          <p class="small register-link">Não possui usuário? <a href="/usuario">Criar agora</a>.</p>
+          <p id="message" class="message" aria-live="polite"></p>
+        </section>
+
+        <section class="card">
+          <h2>Segurança aplicada</h2>
+          <ul>
+            <li>Senha validada com hash bcrypt no backend.</li>
+            <li>JWT com expiração para rotas privadas.</li>
+            <li>Rate limit e bloqueio por tentativas inválidas.</li>
+            <li>API Key do SIpe IT protegida por criptografia AES.</li>
+          </ul>
+        </section>
+      </div>
+    </div>
+
+    <script src="/js/auth.js"></script>
+    <script>
+      setupLoginForm('login-form', 'message')
+    </script>
+  </body>
+</html>
