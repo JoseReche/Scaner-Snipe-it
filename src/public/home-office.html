@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Baixa de Kit Home Office</title>
+<title>Baixa Home Office</title>
 <link rel="stylesheet" href="/auth.css" />
 <script src="https://unpkg.com/html5-qrcode"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
@@ -11,13 +11,14 @@
 <body>
 <div class="container">
   <div class="topbar">
-    <h3>Baixa de Kit Home Office</h3>
+    <h3>Baixa Home Office</h3>
     <div class="menu-wrapper">
       <button id="menu-toggle" class="menu-toggle" type="button" aria-label="Abrir menu">☰</button>
       <nav id="menu-panel" class="menu-panel" aria-label="Navegação principal">
         <a href="/scanner">Scanner</a>
         <a href="/scanner-pa">Scanner PA</a>
         <a href="/home-office">Baixa Home Office</a>
+        <a href="/retorno-home-office">Retorno Home Office</a>
         <a href="/usuario">Usuário</a>
         <a href="/dashboard">Dashboard</a>
         <a href="#" onclick="logout(event)">Sair</a>
@@ -99,7 +100,6 @@
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
           <button type="button" onclick="clearSignature()">Limpar assinatura</button>
           <button id="generatePdfButton" type="button" onclick="generateTermPdf()">Gerar PDF e anexar</button>
-          <button id="uploadPdfButton" type="button" onclick="uploadGeneratedTermPdf()" disabled>Anexar PDF no ativo</button>
         </div>
 
         <div id="pdfPreviewContainer" style="display:none;margin-top:14px;">
@@ -206,7 +206,6 @@ async function loadAsset(assetId) {
   }
   byId('pdfPreviewFrame').src = ''
   byId('pdfPreviewContainer').style.display = 'none'
-  byId('uploadPdfButton').disabled = true
   fillPanel(data)
 }
 
@@ -489,12 +488,11 @@ async function generateTermPdf() {
     generatedTermPdfUrl = URL.createObjectURL(pdfBlob)
     byId('pdfPreviewFrame').src = generatedTermPdfUrl
     byId('pdfPreviewContainer').style.display = 'block'
-    byId('uploadPdfButton').disabled = false
 
     const uploadSuccess = await uploadGeneratedTermPdf({ silentSuccess: true })
 
     if (!uploadSuccess) {
-      alert('PDF gerado, mas não foi possível anexar automaticamente. Use o botão "Anexar PDF no ativo".')
+      alert('PDF gerado, mas não foi possível anexar automaticamente. Tente gerar novamente.')
       return
     }
 
@@ -524,10 +522,6 @@ async function uploadGeneratedTermPdf({ silentSuccess = false } = {}) {
     alert('Gere o PDF antes de anexar')
     return false
   }
-
-  const uploadButton = byId('uploadPdfButton')
-  uploadButton.disabled = true
-  uploadButton.textContent = 'Anexando PDF...'
 
   try {
     const signerName = byId('signerName').value.trim()
@@ -570,9 +564,6 @@ async function uploadGeneratedTermPdf({ silentSuccess = false } = {}) {
   } catch (error) {
     alert(`Erro ao anexar PDF: ${error.message}`)
     return false
-  } finally {
-    uploadButton.disabled = false
-    uploadButton.textContent = 'Anexar PDF no ativo'
   }
 }
 

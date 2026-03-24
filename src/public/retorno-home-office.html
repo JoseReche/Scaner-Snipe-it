@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Retorno Home Office</title>
+<link rel="stylesheet" href="/auth.css" />
+</head>
+<body>
+<div class="container">
+  <div class="topbar">
+    <h3>Retorno Home Office</h3>
+    <div class="menu-wrapper">
+      <button id="menu-toggle" class="menu-toggle" type="button" aria-label="Abrir menu">☰</button>
+      <nav id="menu-panel" class="menu-panel" aria-label="Navegação principal">
+        <a href="/scanner">Scanner</a>
+        <a href="/scanner-pa">Scanner PA</a>
+        <a href="/home-office">Baixa Home Office</a>
+        <a href="/retorno-home-office">Retorno Home Office</a>
+        <a href="/usuario">Usuário</a>
+        <a href="/dashboard">Dashboard</a>
+        <a href="#" onclick="logout(event)">Sair</a>
+      </nav>
+    </div>
+  </div>
+
+  <div class="grid scanner-grid">
+    <section class="card">
+      <h3>Retorno de equipamentos</h3>
+      <p class="small">Página criada para o fluxo de retorno Home Office.</p>
+      <p class="small">Quando você confirmar as regras do processo, posso montar o formulário completo aqui.</p>
+    </section>
+  </div>
+</div>
+
+<script src="/js/auth.js"></script>
+<script>
+requireAuthToken()
+
+const menuToggle = document.getElementById('menu-toggle')
+const menuPanel = document.getElementById('menu-panel')
+
+menuToggle.addEventListener('click', () => {
+  menuPanel.classList.toggle('open')
+})
+
+document.addEventListener('click', (event) => {
+  if (!menuPanel.contains(event.target) && !menuToggle.contains(event.target)) {
+    menuPanel.classList.remove('open')
+  }
+})
+
+function logout(event) {
+  if (event) event.preventDefault()
+  clearJwtToken()
+  window.location.href = '/login'
+}
+</script>
+</body>
+</html>

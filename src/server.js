@@ -28,7 +28,8 @@ const htmlRoutes = {
   "/dashboard": "dashboard.html",
   "/register": "register.html",
   "/change-password": "change-password.html",
-  "/home-office": "home-office.html"
+  "/home-office": "home-office.html",
+  "/retorno-home-office": "retorno-home-office.html"
 }
 
 for (const [routePath, fileName] of Object.entries(htmlRoutes)) {
