@@ -15,7 +15,7 @@ const app = express()
 
 app.disable("x-powered-by")
 app.use(cors())
-app.use(express.json())
+app.use(express.json({ limit: "10mb" }))
 
 const publicDir = path.join(__dirname, "public")
 
@@ -616,6 +616,65 @@ app.post("/home-office/baixa", async (req, res) => {
 
     logApiError("POST /home-office/baixa", e)
     return res.status(getErrorStatusCode(e)).json(buildClientError(e, "Erro ao realizar baixa do kit home office"))
+  }
+})
+
+app.post("/home-office/termo", express.raw({ type: "application/pdf", limit: "10mb" }), async (req, res) => {
+  const { asset, file_name: fileName, note } = req.query
+
+  if (asset === undefined || asset === null || asset === "") {
+    return res.status(400).json({ error: "Campo asset é obrigatório" })
+  }
+
+  const parsedAsset = parseIntegerField(asset)
+
+  if (parsedAsset === undefined) {
+    return res.status(400).json({ error: "asset deve ser um número válido" })
+  }
+
+  const pdfBuffer = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || "")
+
+  if (!pdfBuffer || pdfBuffer.length === 0) {
+    return res.status(400).json({ error: "O PDF gerado está vazio" })
+  }
+
+  const maxFileSize = 2 * 1024 * 1024
+
+  if (pdfBuffer.length > maxFileSize) {
+    return res.status(413).json({ error: "O arquivo PDF excede o limite de 2MB do Snipe-IT" })
+  }
+
+  const safeFileName = typeof fileName === "string" && fileName.trim()
+    ? fileName.trim()
+    : `termo-home-office-${parsedAsset}.pdf`
+
+  try {
+    const requestHeaders = await getUserHeaders(req)
+    const uploadHeaders = {
+      Authorization: requestHeaders.Authorization,
+      Accept: "application/json"
+    }
+    const formData = new FormData()
+    const blob = new Blob([pdfBuffer], { type: "application/pdf" })
+    formData.append("file[]", blob, safeFileName)
+
+    if (note !== undefined && note !== null && String(note).trim() !== "") {
+      formData.append("notes", String(note))
+    }
+
+    await axios.post(`${SNIPE_URL}/hardware/${parsedAsset}/files`, formData, {
+      headers: uploadHeaders,
+      validateStatus: (status) => status >= 200 && status < 300
+    })
+
+    return res.json({ success: true })
+  } catch (e) {
+    if (e.statusCode) {
+      return res.status(e.statusCode).json({ error: e.message })
+    }
+
+    logApiError("POST /home-office/termo", e)
+    return res.status(getErrorStatusCode(e)).json(buildClientError(e, "Erro ao anexar termo no ativo"))
   }
 })
 

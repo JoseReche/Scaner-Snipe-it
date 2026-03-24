@@ -6,6 +6,7 @@
 <title>Baixa de Kit Home Office</title>
 <link rel="stylesheet" href="/auth.css" />
 <script src="https://unpkg.com/html5-qrcode"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
 </head>
 <body>
 <div class="container">
@@ -37,8 +38,8 @@
     </section>
 
     <section class="card">
-      <h3>Baixa do Kit</h3>
-      <div id="emptyState" class="small">Escaneie um ativo para preencher os dados de baixa.</div>
+      <h3>Formulário do Termo</h3>
+      <div id="emptyState" class="small">Escaneie um ativo para preencher os dados do termo.</div>
 
       <div id="assetPanel" style="display:none">
         <div class="info-grid">
@@ -48,17 +49,61 @@
           <div class="info-item"><b>Atribuído:</b> <span id="view-assigned">-</span></div>
         </div>
 
-        <label>Status de baixa</label>
-        <select id="editStatus"></select>
+        <hr style="margin:20px 0;">
+        <h4 style="margin:0 0 12px 0;">Termo de uso + assinatura</h4>
+        <p class="small" style="margin-top:0;">Gera um PDF com o termo e assinatura, e anexa no ativo.</p>
 
-        <label>Observações</label>
-        <textarea id="editNotes" placeholder="Ex.: devolução de kit home office"></textarea>
+        <label>Nome do colaborador para assinatura</label>
+        <input id="signerName" placeholder="Ex.: Maria Silva">
 
-        <label style="display:flex;align-items:center;gap:8px;margin-top:12px;">
-          <input id="doCheckin" type="checkbox" style="width:auto;"> Realizar check-in antes da baixa
-        </label>
+        <label>CPF</label>
+        <input id="signerCpf" placeholder="Ex.: 11441353976">
 
-        <button id="saveButton" onclick="saveBaixa()">Confirmar baixa</button>
+        <label>Função</label>
+        <input id="signerRole" placeholder="Ex.: Auxiliar Administrativo">
+
+        <label>Data de início do home office</label>
+        <input id="homeOfficeStartDate" type="date">
+
+        <label>Cidade (assinatura)</label>
+        <input id="signatureCity" placeholder="Ex.: Joinville">
+
+        <label>Nº Patrimônio</label>
+        <input id="assetPatrimonio" placeholder="Ex.: NT013050" readonly>
+
+        <label>Headset (opcional)</label>
+        <input id="assetHeadset" placeholder="Ex.: SN-1234">
+
+        <label>Monitor (opcional)</label>
+        <input id="assetMonitor" placeholder="Ex.: SN-9988">
+
+        <label>Itens entregues (marque os que serão entregues)</label>
+        <div id="deliveryChecklist" style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;margin-bottom:10px;">
+          <label><input type="checkbox" id="item-computador" checked style="width:auto;"> Computador/Notebook</label>
+          <label><input type="checkbox" id="item-monitor" checked style="width:auto;"> Monitor</label>
+          <label><input type="checkbox" id="item-carregador" checked style="width:auto;"> Carregador</label>
+          <label><input type="checkbox" id="item-teclado" checked style="width:auto;"> Teclado</label>
+          <label><input type="checkbox" id="item-mouse" checked style="width:auto;"> Mouse</label>
+          <label><input type="checkbox" id="item-headset" checked style="width:auto;"> Headset + base</label>
+          <label><input type="checkbox" id="item-cabos" checked style="width:auto;"> Cabos de energia/rede</label>
+          <label><input type="checkbox" id="item-regua" checked style="width:auto;"> Régua de energia</label>
+        </div>
+
+        <label>Observação</label>
+        <textarea id="termObservation" rows="3" placeholder="Ex.: itens adicionais, condições do equipamento, etc."></textarea>
+
+        <label>Assinatura</label>
+        <canvas id="signatureCanvas" width="560" height="180" style="width:100%;border:1px solid #ccc;border-radius:6px;background:#fff;"></canvas>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+          <button type="button" onclick="clearSignature()">Limpar assinatura</button>
+          <button id="generatePdfButton" type="button" onclick="generateTermPdf()">Gerar PDF</button>
+          <button id="uploadPdfButton" type="button" onclick="uploadGeneratedTermPdf()" disabled>Anexar PDF no ativo</button>
+        </div>
+
+        <div id="pdfPreviewContainer" style="display:none;margin-top:14px;">
+          <label>Pré-visualização do PDF gerado</label>
+          <iframe id="pdfPreviewFrame" title="Pré-visualização do termo em PDF" style="width:100%;height:420px;border:1px solid #ccc;border-radius:6px;background:#fff;"></iframe>
+        </div>
       </div>
     </section>
   </div>
@@ -72,7 +117,10 @@ let currentAssetId = null
 let scanner = null
 let scanning = false
 let lastScan = null
-let statusOptions = []
+let signaturePad = null
+let generatedTermPdfBlob = null
+let generatedTermPdfName = null
+let generatedTermPdfUrl = null
 
 const byId = (id) => document.getElementById(id)
 
@@ -111,43 +159,6 @@ function parseAssetId(raw) {
   return raw.trim()
 }
 
-function fillStatusOptions(selectedValue) {
-  const select = byId('editStatus')
-  select.innerHTML = ''
-
-  const empty = document.createElement('option')
-  empty.value = ''
-  empty.textContent = 'Selecione'
-  select.appendChild(empty)
-
-  statusOptions.forEach((item) => {
-    const opt = document.createElement('option')
-    opt.value = item.id
-    opt.textContent = `${item.id} - ${item.name}`
-    select.appendChild(opt)
-  })
-
-  if (selectedValue) select.value = selectedValue
-}
-
-async function loadStatusOptions() {
-  const res = await fetch('/options', { headers: authHeaders() })
-  const data = await res.json()
-
-  if (res.status === 401 && isAuthTokenError(data)) {
-    logout()
-    return
-  }
-
-  if (!res.ok) {
-    alert(data.error || 'Falha ao carregar status')
-    return
-  }
-
-  statusOptions = data.statuses || []
-  fillStatusOptions(null)
-}
-
 function fillPanel(asset) {
   byId('emptyState').style.display = 'none'
   byId('assetPanel').style.display = 'block'
@@ -156,9 +167,6 @@ function fillPanel(asset) {
   byId('view-pa').textContent = asset.pa || '-'
   byId('view-status').textContent = asset.status || '-'
   byId('view-assigned').textContent = asset.assignedTo || '-'
-
-  fillStatusOptions(asset.statusId)
-  byId('editNotes').value = asset.notes || ''
 }
 
 async function loadAsset(assetId) {
@@ -177,6 +185,16 @@ async function loadAsset(assetId) {
 
   currentAssetId = data.id
   byId('manualAsset').value = data.id
+  byId('assetPatrimonio').value = data.assetTag || data.id || ''
+  generatedTermPdfBlob = null
+  generatedTermPdfName = null
+  if (generatedTermPdfUrl) {
+    URL.revokeObjectURL(generatedTermPdfUrl)
+    generatedTermPdfUrl = null
+  }
+  byId('pdfPreviewFrame').src = ''
+  byId('pdfPreviewContainer').style.display = 'none'
+  byId('uploadPdfButton').disabled = true
   fillPanel(data)
 }
 
@@ -202,6 +220,331 @@ function onScanSuccess(decodedText) {
   loadAsset(id)
 }
 
+function setupSignaturePad() {
+  const canvas = byId('signatureCanvas')
+  const context = canvas.getContext('2d')
+  let drawing = false
+
+  const positionFromEvent = (event) => {
+    const rect = canvas.getBoundingClientRect()
+    const touch = event.touches?.[0]
+    const clientX = touch ? touch.clientX : event.clientX
+    const clientY = touch ? touch.clientY : event.clientY
+
+    return {
+      x: clientX - rect.left,
+      y: clientY - rect.top
+    }
+  }
+
+  const start = (event) => {
+    drawing = true
+    const position = positionFromEvent(event)
+    context.beginPath()
+    context.moveTo(position.x, position.y)
+    event.preventDefault()
+  }
+
+  const move = (event) => {
+    if (!drawing) return
+    const position = positionFromEvent(event)
+    context.lineWidth = 2
+    context.lineCap = 'round'
+    context.strokeStyle = '#111'
+    context.lineTo(position.x, position.y)
+    context.stroke()
+    event.preventDefault()
+  }
+
+  const stop = () => {
+    drawing = false
+  }
+
+  canvas.addEventListener('mousedown', start)
+  canvas.addEventListener('mousemove', move)
+  canvas.addEventListener('mouseup', stop)
+  canvas.addEventListener('mouseleave', stop)
+
+  canvas.addEventListener('touchstart', start, { passive: false })
+  canvas.addEventListener('touchmove', move, { passive: false })
+  canvas.addEventListener('touchend', stop)
+  canvas.addEventListener('touchcancel', stop)
+
+  signaturePad = { canvas, context }
+}
+
+function clearSignature() {
+  if (!signaturePad) return
+  signaturePad.context.clearRect(0, 0, signaturePad.canvas.width, signaturePad.canvas.height)
+}
+
+function signatureHasInk() {
+  if (!signaturePad) return false
+  const pixels = signaturePad.context.getImageData(0, 0, signaturePad.canvas.width, signaturePad.canvas.height).data
+
+  for (let index = 3; index < pixels.length; index += 4) {
+    if (pixels[index] !== 0) return true
+  }
+
+  return false
+}
+
+function generateTermPdf() {
+  if (!currentAssetId) {
+    alert('Primeiro selecione um ativo')
+    return
+  }
+
+  const signerName = byId('signerName').value.trim()
+  const signerCpf = byId('signerCpf').value.trim()
+  const signerRole = byId('signerRole').value.trim()
+  const homeOfficeStartDate = byId('homeOfficeStartDate').value
+  const signatureCity = byId('signatureCity').value.trim()
+    const assetPatrimonio = byId('assetPatrimonio').value.trim()
+    const assetHeadset = byId('assetHeadset').value.trim()
+    const assetMonitor = byId('assetMonitor').value.trim()
+    const termObservation = byId('termObservation').value.trim()
+    const deliveryItems = [
+      { id: 'item-computador', label: 'a. Computador/ Notebook' },
+      { id: 'item-monitor', label: 'b. Monitor' },
+      { id: 'item-carregador', label: 'c. Carregador' },
+      { id: 'item-teclado', label: 'd. Teclado' },
+      { id: 'item-mouse', label: 'e. Mouse' },
+      { id: 'item-headset', label: 'f. Headset + base' },
+      { id: 'item-cabos', label: 'g. Cabos de Conexão de energia e rede' },
+      { id: 'item-regua', label: 'h. Régua de energia' }
+    ]
+
+  if (!signerName) {
+    alert('Informe o nome do colaborador para assinatura')
+    return
+  }
+
+  if (!signerCpf) {
+    alert('Informe o CPF')
+    return
+  }
+
+  if (!signerRole) {
+    alert('Informe a função')
+    return
+  }
+
+  if (!homeOfficeStartDate) {
+    alert('Informe a data de início do home office')
+    return
+  }
+
+  if (!signatureCity) {
+    alert('Informe a cidade da assinatura')
+    return
+  }
+
+  if (!signatureHasInk()) {
+    alert('Faça a assinatura no campo antes de gerar o PDF')
+    return
+  }
+
+  const generateButton = byId('generatePdfButton')
+  generateButton.disabled = true
+  generateButton.textContent = 'Gerando PDF...'
+
+  try {
+    const { jsPDF } = window.jspdf
+    const pdf = new jsPDF({ unit: 'pt', format: 'a4' })
+    const margin = 40
+    let y = 60
+
+    const startDate = new Date(`${homeOfficeStartDate}T12:00:00`).toLocaleDateString('pt-BR')
+    const issuedAt = new Date().toLocaleDateString('pt-BR')
+
+    pdf.setTextColor(38, 56, 60)
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(15)
+    pdf.text('TERMO DE ENTREGA E CIÊNCIA', 210, y)
+    y += 20
+    pdf.setFont('helvetica', 'bolditalic')
+    pdf.setFontSize(13)
+    pdf.text('TRABALHO REGIME HOME OFFICE', 220, y)
+    y += 35
+
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(12)
+    pdf.text('Eu', margin, y)
+    pdf.line(55, y + 2, 410, y + 2)
+    pdf.text(signerName, 60, y - 2)
+    pdf.text(', inscrito no CPF sob', 415, y)
+    y += 20
+    pdf.text('nº', margin, y)
+    pdf.line(55, y + 2, 230, y + 2)
+    pdf.text(signerCpf, 58, y - 2)
+    pdf.text(', integrante do quadro de colaboradores da empresa SCHULZE', 235, y)
+    y += 18
+    pdf.setFont('helvetica', 'bold')
+    pdf.text('ADVOGADOS ASSOCIADOS', margin, y)
+    pdf.setFont('helvetica', 'normal')
+    pdf.text(', onde exerço a função de', 190, y)
+    pdf.line(350, y + 2, 540, y + 2)
+    pdf.text(signerRole, 352, y - 2)
+    y += 18
+    pdf.text(`manifesto ciência e concordância de que, a partir do dia ${startDate} e até posterior`, margin, y)
+    y += 18
+    pdf.text('orientação, realizarei o desempenho de minhas funções em minha residência, conforme carga horária e', margin, y)
+    y += 18
+    pdf.text('escalas habituais, em regime de trabalho home office.', margin, y)
+    y += 30
+
+    const sigilo = 'Comprometo-me a não divulgar, sem prévia, expressa e formal autorização do representante legal da empresa contratante, quaisquer informações de propriedade desta ou das instituições bancárias e seus demais clientes, respeitando tudo que disciplina o Regimento Interno da empresa e de segurança da informação e sigilo bancário, sob pena das penalidades já de conhecimento, como de praxe nas rotinas habituais.'
+    const sigiloLines = pdf.splitTextToSize(sigilo, 515)
+    pdf.text(sigiloLines, margin + 18, y)
+    y += (sigiloLines.length * 15) + 10
+
+    pdf.text('•', margin + 12, y)
+    const comodato = 'Equipamentos recebidos e instalados em HOME, em regime de COMODATO, de propriedade da CONTRATANTE e que deverão ser restituídos à CONTRATANTE ao término do Projeto HOME:'
+    const comodatoLines = pdf.splitTextToSize(comodato, 495)
+    pdf.text(comodatoLines, margin + 35, y)
+    y += (comodatoLines.length * 14) + 14
+
+    const tableX = margin
+    const tableY = y
+    const tableWidth = 515
+    const rowHeight = 18
+    const headersHeight = 24
+    const rows = deliveryItems.map((item) => item.label)
+
+    pdf.rect(tableX, tableY, tableWidth, headersHeight + (rows.length * rowHeight))
+    pdf.line(tableX + 430, tableY, tableX + 430, tableY + headersHeight + (rows.length * rowHeight))
+    pdf.line(tableX + 472, tableY + headersHeight, tableX + 472, tableY + headersHeight + (rows.length * rowHeight))
+    pdf.line(tableX, tableY + headersHeight, tableX + tableWidth, tableY + headersHeight)
+    pdf.text('Descrição', tableX + 215, tableY + 16)
+    pdf.text('Entregue', tableX + 448, tableY + 10)
+    pdf.text('SIM', tableX + 444, tableY + 22)
+    pdf.text('NÃO', tableX + 482, tableY + 22)
+
+    let rowY = tableY + headersHeight
+    rows.forEach((item, index) => {
+      rowY += rowHeight
+      pdf.line(tableX, rowY, tableX + tableWidth, rowY)
+      pdf.text(item, tableX + 8, rowY - 5)
+      const isDelivered = byId(deliveryItems[index].id).checked
+      if (isDelivered) {
+        pdf.text('X', tableX + 448, rowY - 5)
+      } else {
+        pdf.text('X', tableX + 485, rowY - 5)
+      }
+    })
+
+    y = tableY + headersHeight + (rows.length * rowHeight) + 12
+    pdf.rect(tableX, y, 380, 86)
+    pdf.rect(tableX + 380, y, 135, 86)
+    pdf.text('Obs.: No caso de entrega de outros equipamentos, descreva:', tableX + 6, y + 18)
+    const observationLines = pdf.splitTextToSize(termObservation || '-', 355)
+    pdf.text(observationLines.slice(0, 3), tableX + 6, y + 38)
+    pdf.text('Nº Patrimônio', tableX + 420, y + 18)
+    pdf.line(tableX + 380, y + 28, tableX + 515, y + 28)
+    pdf.line(tableX + 380, y + 48, tableX + 515, y + 48)
+    pdf.line(tableX + 380, y + 67, tableX + 515, y + 67)
+    pdf.text(assetPatrimonio || '-', tableX + 386, y + 42)
+    pdf.text(`HeadSet: ${assetHeadset || ''}`, tableX + 386, y + 62)
+    pdf.text(`Monitor: ${assetMonitor || ''}`, tableX + 386, y + 81)
+
+    y += 112
+    const fechamento = 'Declaro ciência do meu dever em zelar pelos equipamentos recebidos e autorizo o desconto em folha de pagamento referentes a eventuais danos causados por mau uso, conforme descrito nos artigos 5º e 6º do Regimento Interno.'
+    const fechamentoLines = pdf.splitTextToSize(fechamento, 515)
+    pdf.text(fechamentoLines, margin + 14, y)
+    y += (fechamentoLines.length * 14) + 18
+
+    const signatureDataUrl = signaturePad.canvas.toDataURL('image/png')
+    pdf.addImage(signatureDataUrl, 'PNG', margin, y, 220, 72)
+    pdf.text(`Assinatura: ${signerName}`, margin + 230, y + 32)
+    pdf.text(`${signatureCity}, ${issuedAt}`, margin + 230, y + 52)
+
+    const pdfBlob = pdf.output('blob')
+    const maxUploadSize = 2 * 1024 * 1024
+
+    if (pdfBlob.size > maxUploadSize) {
+      alert('O PDF gerado ultrapassa 2MB. Reduza o conteúdo antes de anexar.')
+      return
+    }
+
+    const safeName = signerName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+    const fileName = `termo-home-office-${safeName || 'assinatura'}-${currentAssetId}.pdf`
+
+    generatedTermPdfBlob = pdfBlob
+    generatedTermPdfName = fileName
+    if (generatedTermPdfUrl) {
+      URL.revokeObjectURL(generatedTermPdfUrl)
+    }
+    generatedTermPdfUrl = URL.createObjectURL(pdfBlob)
+    byId('pdfPreviewFrame').src = generatedTermPdfUrl
+    byId('pdfPreviewContainer').style.display = 'block'
+    byId('uploadPdfButton').disabled = false
+    alert('PDF gerado com sucesso e exibido na tela. Agora clique em "Anexar PDF no ativo".')
+  } catch (error) {
+    alert(`Erro ao gerar PDF: ${error.message}`)
+  } finally {
+    generateButton.disabled = false
+    generateButton.textContent = 'Gerar PDF'
+  }
+}
+
+async function uploadGeneratedTermPdf() {
+  if (!currentAssetId) {
+    alert('Primeiro selecione um ativo')
+    return
+  }
+
+  if (!generatedTermPdfBlob || !generatedTermPdfName) {
+    alert('Gere o PDF antes de anexar')
+    return
+  }
+
+  const uploadButton = byId('uploadPdfButton')
+  uploadButton.disabled = true
+  uploadButton.textContent = 'Anexando PDF...'
+
+  try {
+    const signerName = byId('signerName').value.trim()
+    const query = new URLSearchParams({
+      asset: String(currentAssetId),
+      file_name: generatedTermPdfName,
+      note: `Termo de uso home office assinado por ${signerName || 'colaborador'}`
+    })
+
+    const response = await fetch(`/home-office/termo?${query.toString()}`, {
+      method: 'POST',
+      headers: authHeaders({ 'Content-Type': 'application/pdf' }),
+      body: generatedTermPdfBlob
+    })
+
+    const rawBody = await response.text()
+    let data = {}
+
+    try {
+      data = rawBody ? JSON.parse(rawBody) : {}
+    } catch (parseError) {
+      data = { error: rawBody || 'Resposta inválida do servidor' }
+    }
+
+    if (response.status === 401 && isAuthTokenError(data)) {
+      logout()
+      return
+    }
+
+    if (!response.ok) {
+      alert(data.error || 'Falha ao anexar termo no ativo')
+      return
+    }
+
+    alert('PDF anexado com sucesso no ativo')
+  } catch (error) {
+    alert(`Erro ao anexar PDF: ${error.message}`)
+  } finally {
+    uploadButton.disabled = false
+    uploadButton.textContent = 'Anexar PDF no ativo'
+  }
+}
+
 async function startScanner() {
   if (scanning) return
 
@@ -216,47 +559,7 @@ async function startScanner() {
   scanning = true
 }
 
-async function saveBaixa() {
-  if (!currentAssetId) return
-
-  const payload = {
-    asset: currentAssetId,
-    status_id: byId('editStatus').value,
-    notes: byId('editNotes').value,
-    do_checkin: byId('doCheckin').checked
-  }
-
-  const btn = byId('saveButton')
-  btn.disabled = true
-  btn.textContent = 'Salvando...'
-
-  const res = await fetch('/home-office/baixa', {
-    method: 'POST',
-    headers: authHeaders({ 'Content-Type': 'application/json' }),
-    body: JSON.stringify(payload)
-  })
-
-  const data = await res.json()
-
-  if (res.status === 401 && isAuthTokenError(data)) {
-    logout()
-    return
-  }
-
-  if (!res.ok) {
-    alert(data.error || 'Falha na baixa do kit home office')
-    btn.disabled = false
-    btn.textContent = 'Confirmar baixa'
-    return
-  }
-
-  fillPanel(data.asset)
-  btn.disabled = false
-  btn.textContent = 'Confirmar baixa'
-  alert('Baixa do kit realizada com sucesso')
-}
-
-loadStatusOptions()
+setupSignaturePad()
 </script>
 </body>
 </html>
