@@ -54,6 +54,7 @@ const PORT = process.env.PORT || 3000
 const DEFAULT_PA_FIELD_KEY = process.env.SNIPE_PA_FIELD_KEY || "_snipeit_pa_6"
 
 const hasValidConfig = !SNIPE_URL.includes("SEU-SNIPE")
+const SNIPE_WEB_BASE_URL = SNIPE_URL.replace(/\/api\/v\d+\/?$/i, "")
 
 const buildHeadersFromApiKey = (apiKey) => ({
   Authorization: `Bearer ${apiKey}`,
@@ -128,6 +129,37 @@ const mapAsset = (asset) => ({
     Object.entries(asset.custom_fields || {}).map(([key, value]) => [key, value.value ?? null])
   )
 })
+
+const parseDateValue = (value) => {
+  if (!value) return 0
+  const parsed = new Date(value).getTime()
+  return Number.isNaN(parsed) ? 0 : parsed
+}
+
+const getLatestUpload = (asset) => {
+  const uploads = Array.isArray(asset?.uploads) ? asset.uploads : []
+
+  if (uploads.length === 0) {
+    return null
+  }
+
+  const latestUpload = uploads
+    .slice()
+    .sort((a, b) => parseDateValue(b?.created_at?.datetime || b?.created_at || b?.updated_at) - parseDateValue(a?.created_at?.datetime || a?.created_at || a?.updated_at))[0]
+
+  if (!latestUpload) {
+    return null
+  }
+
+  return {
+    id: latestUpload.id ?? null,
+    name: latestUpload.display_name || latestUpload.filename || latestUpload.name || "Documento anexado",
+    url: latestUpload.url || latestUpload.file_path || null,
+    createdAt: latestUpload.created_at?.datetime || latestUpload.created_at || null
+  }
+}
+
+const buildSnipeAssetWebUrl = (assetId) => `${SNIPE_WEB_BASE_URL}/hardware/${assetId}`
 
 const fetchAssetById = async (id, requestHeaders) => {
   const response = await axios.get(`${SNIPE_URL}/hardware/${id}`, { headers: requestHeaders })
@@ -635,9 +667,24 @@ app.get("/home-office/retorno-assets", async (req, res) => {
     }
 
     const hardwareRows = await fetchPaginatedRows("hardware", requestHeaders)
-    const assignedAssets = hardwareRows
+    const assignedRows = hardwareRows
       .filter((asset) => parseIntegerField(asset?.assigned_to?.id) === parseIntegerField(homeOfficeUser.id))
-      .map((asset) => mapAsset(asset))
+
+    const assignedAssetsDetails = await Promise.all(
+      assignedRows.map(async (asset) => fetchAssetById(asset.id, requestHeaders))
+    )
+
+    const assignedAssets = assignedAssetsDetails
+      .map((asset) => {
+        const mapped = mapAsset(asset)
+        const latestUpload = getLatestUpload(asset)
+
+        return {
+          ...mapped,
+          snipeUrl: buildSnipeAssetWebUrl(mapped.id),
+          latestUpload
+        }
+      })
       .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "pt-BR", { sensitivity: "base" }))
 
     return res.json({

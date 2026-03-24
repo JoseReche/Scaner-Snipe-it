@@ -40,6 +40,23 @@
         <label>Ativo lido</label>
         <div id="assetLookupResult" class="small">Nenhum ativo consultado.</div>
       </div>
+
+      <hr style="margin:16px 0;">
+      <h4 style="margin:0 0 10px 0;">Atualização rápida</h4>
+      <label>PA</label>
+      <input value="0" readonly>
+      <label>Status</label>
+      <input value="2 - Ready to Deploy" readonly>
+      <label>Local</label>
+      <input value="93 - Matriz - Predio" readonly>
+      <label>Local Padrão</label>
+      <input value="93 - Matriz - Predio" readonly>
+      <label>Empresa</label>
+      <input value="2 - Schulze Advogados Associados" readonly>
+      <label>Atribuído para</label>
+      <input value="73 - estoque matriz" readonly>
+      <label>Notas</label>
+      <textarea rows="2" readonly>Retorno Home</textarea>
     </section>
 
     <section class="card">
@@ -65,6 +82,15 @@ requireAuthToken()
 let scanner = null
 let scanning = false
 let lastScan = null
+const QUICK_RETURN_PAYLOAD = {
+  pa: '0',
+  status_id: '2',
+  location_id: '93',
+  rtd_location_id: '93',
+  company_id: '2',
+  assigned_to: '73',
+  notes: 'Retorno Home'
+}
 
 const byId = (id) => document.getElementById(id)
 const menuToggle = byId('menu-toggle')
@@ -112,13 +138,46 @@ function renderAssetsList(assets) {
 
   listEl.innerHTML = assets.map((asset) => `
     <div class="info-item" style="border:1px solid rgba(255,255,255,.14);padding:10px;border-radius:8px;">
-      <div><b>ID:</b> ${asset.id || '-'}</div>
-      <div><b>Nome:</b> ${asset.name || '-'}</div>
-      <div><b>Patrimônio:</b> ${asset.assetTag || '-'}</div>
-      <div><b>Status:</b> ${asset.status || '-'}</div>
-      <div><b>Local:</b> ${asset.location || '-'}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;">
+        <div><b>ID:</b> ${asset.id || '-'}</div>
+        <div><b>PA:</b> ${asset.pa || '-'}</div>
+        <div><b>Nome:</b> ${asset.name || '-'}</div>
+        <div><b>Patrimônio:</b> ${asset.assetTag || '-'}</div>
+        <div><b>Status:</b> ${asset.status || '-'}</div>
+        <div><b>Local:</b> ${asset.location || '-'}</div>
+      </div>
+      <div style="margin-top:8px;">
+        <b>Último documento:</b>
+        ${asset.latestUpload?.url
+    ? `<a href="${asset.latestUpload.url}" target="_blank" rel="noopener noreferrer">${asset.latestUpload.name || 'Abrir documento'}</a>`
+    : (asset.latestUpload?.name || 'Não encontrado')}
+      </div>
+      <div style="margin-top:6px;">
+        <a href="${asset.snipeUrl || '#'}" target="_blank" rel="noopener noreferrer">Ver ativo completo no Snipe-IT</a>
+      </div>
     </div>
   `).join('')
+}
+
+async function applyQuickReturnUpdate(assetId) {
+  const response = await fetch(`/asset/${assetId}`, {
+    method: 'PATCH',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(QUICK_RETURN_PAYLOAD)
+  })
+  const data = await response.json()
+
+  if (response.status === 401 && isAuthTokenError(data)) {
+    logout()
+    return false
+  }
+
+  if (!response.ok) {
+    alert(data.error || 'Falha ao atualizar ativo para retorno')
+    return false
+  }
+
+  return true
 }
 
 async function loadHomeOfficeAssets() {
@@ -161,15 +220,24 @@ async function loadAsset(assetId) {
     <b>Status:</b> ${data.status || '-'}<br>
     <b>Atribuído:</b> ${data.assignedTo || '-'}
   `
+
+  return data
 }
 
 function loadAssetFromInput() {
   const id = parseAssetId(byId('manualAsset').value)
   if (!id) return
-  loadAsset(id)
+  loadAsset(id).then(async (asset) => {
+    if (!asset?.id) return
+    const updated = await applyQuickReturnUpdate(asset.id)
+    if (!updated) return
+    await loadAsset(asset.id)
+    await loadHomeOfficeAssets()
+    alert('Ativo categorizado automaticamente para retorno.')
+  })
 }
 
-function onScanSuccess(decodedText) {
+async function onScanSuccess(decodedText) {
   const id = parseAssetId(decodedText)
 
   if (!id || id === lastScan) return
@@ -182,7 +250,15 @@ function onScanSuccess(decodedText) {
     document.body.classList.remove('scan-success')
   }, 500)
 
-  loadAsset(id)
+  const asset = await loadAsset(id)
+  if (!asset?.id) return
+
+  const updated = await applyQuickReturnUpdate(asset.id)
+  if (!updated) return
+
+  await loadAsset(asset.id)
+  await loadHomeOfficeAssets()
+  alert('Ativo categorizado automaticamente para retorno.')
 }
 
 async function startScanner() {
