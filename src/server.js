@@ -620,6 +620,45 @@ app.post("/home-office/baixa", async (req, res) => {
   }
 })
 
+app.get("/home-office/retorno-assets", async (req, res) => {
+  try {
+    const requestHeaders = await getUserHeaders(req)
+    const users = await fetchPaginatedRows("users", requestHeaders)
+    const homeOfficeUser = users.find((user) => {
+      const userName = String(user.name || user.username || "").trim().toLowerCase()
+
+      return userName === "home office"
+    })
+
+    if (!homeOfficeUser?.id) {
+      return res.status(404).json({ error: "Usuário Home Office não encontrado no Snipe-IT" })
+    }
+
+    const hardwareRows = await fetchPaginatedRows("hardware", requestHeaders)
+    const assignedAssets = hardwareRows
+      .filter((asset) => parseIntegerField(asset?.assigned_to?.id) === parseIntegerField(homeOfficeUser.id))
+      .map((asset) => mapAsset(asset))
+      .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "pt-BR", { sensitivity: "base" }))
+
+    return res.json({
+      success: true,
+      user: {
+        id: homeOfficeUser.id,
+        name: homeOfficeUser.name || homeOfficeUser.username || "Home Office"
+      },
+      total: assignedAssets.length,
+      assets: assignedAssets
+    })
+  } catch (e) {
+    if (e.statusCode) {
+      return res.status(e.statusCode).json({ error: e.message })
+    }
+
+    logApiError("GET /home-office/retorno-assets", e)
+    return res.status(getErrorStatusCode(e)).json(buildClientError(e, "Erro ao buscar ativos do usuário Home Office"))
+  }
+})
+
 app.post("/home-office/termo", express.raw({ type: "application/pdf", limit: "10mb" }), async (req, res) => {
   const { asset, file_name: fileName, note } = req.query
 
