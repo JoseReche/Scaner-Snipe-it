@@ -15,7 +15,7 @@ const app = express()
 
 app.disable("x-powered-by")
 app.use(cors())
-app.use(express.json())
+app.use(express.json({ limit: "10mb" }))
 
 const publicDir = path.join(__dirname, "public")
 
@@ -28,7 +28,8 @@ const htmlRoutes = {
   "/dashboard": "dashboard.html",
   "/register": "register.html",
   "/change-password": "change-password.html",
-  "/home-office": "home-office.html"
+  "/home-office": "home-office.html",
+  "/retorno-home-office": "retorno-home-office.html"
 }
 
 for (const [routePath, fileName] of Object.entries(htmlRoutes)) {
@@ -53,6 +54,7 @@ const PORT = process.env.PORT || 3000
 const DEFAULT_PA_FIELD_KEY = process.env.SNIPE_PA_FIELD_KEY || "_snipeit_pa_6"
 
 const hasValidConfig = !SNIPE_URL.includes("SEU-SNIPE")
+const SNIPE_WEB_BASE_URL = SNIPE_URL.replace(/\/api\/v\d+\/?$/i, "")
 
 const buildHeadersFromApiKey = (apiKey) => ({
   Authorization: `Bearer ${apiKey}`,
@@ -105,6 +107,13 @@ const mapAsset = (asset) => ({
   manufacturer: asset.manufacturer?.name || null,
   assignedTo: asset.assigned_to?.name || null,
   assignedToId: asset.assigned_to?.id || null,
+  assigned_to: asset.assigned_to
+    ? {
+      id: asset.assigned_to.id ?? null,
+      username: asset.assigned_to.username ?? null,
+      name: asset.assigned_to.name ?? null
+    }
+    : null,
   location: asset.location?.name || null,
   locationId: asset.location?.id || null,
   rtdLocation: asset.rtd_location?.name || null,
@@ -120,6 +129,42 @@ const mapAsset = (asset) => ({
     Object.entries(asset.custom_fields || {}).map(([key, value]) => [key, value.value ?? null])
   )
 })
+
+const parseDateValue = (value) => {
+  if (!value) return 0
+  const parsed = new Date(value).getTime()
+  return Number.isNaN(parsed) ? 0 : parsed
+}
+
+const getLatestUpload = (asset) => {
+  const uploads = Array.isArray(asset?.uploads) ? asset.uploads : []
+
+  if (uploads.length === 0) {
+    return null
+  }
+
+  const latestUpload = uploads
+    .slice()
+    .sort((a, b) => parseDateValue(b?.created_at?.datetime || b?.created_at || b?.updated_at) - parseDateValue(a?.created_at?.datetime || a?.created_at || a?.updated_at))[0]
+
+  if (!latestUpload) {
+    return null
+  }
+
+  return {
+    id: latestUpload.id ?? null,
+    name: latestUpload.display_name || latestUpload.filename || latestUpload.name || "Documento anexado",
+    url: buildAbsoluteSnipeUrl(latestUpload.url || latestUpload.file_path || null),
+    createdAt: latestUpload.created_at?.datetime || latestUpload.created_at || null
+  }
+}
+
+const buildSnipeAssetWebUrl = (assetId) => `${SNIPE_WEB_BASE_URL}/hardware/${assetId}`
+const buildAbsoluteSnipeUrl = (rawUrl) => {
+  if (!rawUrl) return null
+  if (/^https?:\/\//i.test(rawUrl)) return rawUrl
+  return `${SNIPE_WEB_BASE_URL}${rawUrl.startsWith("/") ? "" : "/"}${rawUrl}`
+}
 
 const fetchAssetById = async (id, requestHeaders) => {
   const response = await axios.get(`${SNIPE_URL}/hardware/${id}`, { headers: requestHeaders })
@@ -163,6 +208,44 @@ const parseIntegerField = (value) => {
   }
 
   return parsed
+}
+
+const sortOptionsByName = (items) => items.sort((a, b) =>
+  String(a.name).localeCompare(String(b.name), "pt-BR", { numeric: true, sensitivity: "base" })
+)
+
+const getAssetCheckState = (asset) => (asset?.assigned_to?.id ? "checkout" : "checkin")
+
+const updateAssetAssignment = async (assetId, assignedUserId, requestHeaders) => {
+  const currentAsset = await fetchAssetById(assetId, requestHeaders)
+  const currentState = getAssetCheckState(currentAsset)
+  const currentAssignedUserId = parseIntegerField(currentAsset?.assigned_to?.id)
+  const parsedUserId = parseIntegerField(assignedUserId)
+
+  if (parsedUserId === undefined) {
+    if (currentState === "checkout") {
+      await axios.post(`${SNIPE_URL}/hardware/${assetId}/checkin`, {}, { headers: requestHeaders })
+    }
+
+    return
+  }
+
+  if (currentState === "checkout" && currentAssignedUserId === parsedUserId) {
+    return
+  }
+
+  if (currentState === "checkout" && currentAssignedUserId !== parsedUserId) {
+    await axios.post(`${SNIPE_URL}/hardware/${assetId}/checkin`, {}, { headers: requestHeaders })
+  }
+
+  await axios.post(
+    `${SNIPE_URL}/hardware/${assetId}/checkout`,
+    {
+      checkout_to_type: "user",
+      assigned_user: parsedUserId
+    },
+    { headers: requestHeaders }
+  )
 }
 
 const findPaCustomFieldKey = (asset) => {
@@ -319,7 +402,7 @@ const buildClientError = (error, fallback) => {
 
 const buildAssetPayload = async (assetId, body, requestHeaders) => {
   const allowedTextFields = ["notes"]
-  const allowedIntegerFields = ["location_id", "rtd_location_id", "status_id", "model_id", "company_id", "assigned_to"]
+  const allowedIntegerFields = ["location_id", "rtd_location_id", "status_id", "model_id", "company_id"]
   const payload = {}
 
   for (const field of allowedTextFields) {
@@ -426,12 +509,18 @@ app.get("/options", async (req, res) => {
       fetchPaginatedRows("users", requestHeaders)
     ])
 
-    const statuses = statusRows.map((item) => ({ id: item.id, name: item.name })).filter((item) => item.id && item.name)
-    const locations = locationRows.map((item) => ({ id: item.id, name: item.name })).filter((item) => item.id && item.name)
-    const companies = companyRows.map((item) => ({ id: item.id, name: item.name })).filter((item) => item.id && item.name)
-    const users = userRows
+    const statuses = sortOptionsByName(statusRows
+      .map((item) => ({ id: item.id, name: item.name }))
+      .filter((item) => item.id && item.name))
+    const locations = sortOptionsByName(locationRows
+      .map((item) => ({ id: item.id, name: item.name }))
+      .filter((item) => item.id && item.name))
+    const companies = sortOptionsByName(companyRows
+      .map((item) => ({ id: item.id, name: item.name }))
+      .filter((item) => item.id && item.name))
+    const users = sortOptionsByName(userRows
       .map((item) => ({ id: item.id, name: item.name || item.username || item.email }))
-      .filter((item) => item.id && item.name)
+      .filter((item) => item.id && item.name))
 
     return res.json({ statuses, locations, companies, users })
   } catch (e) {
@@ -478,10 +567,15 @@ app.post("/move", async (req, res) => {
 
 app.patch("/asset/:id", async (req, res) => {
   let payload = {}
+  let assignedTo = undefined
+  let assignedToProvided = false
+  let requestHeaders
 
   try {
-    const requestHeaders = await getUserHeaders(req)
+    requestHeaders = await getUserHeaders(req)
     payload = await buildAssetPayload(req.params.id, req.body, requestHeaders)
+    assignedTo = req.body.assigned_to
+    assignedToProvided = Object.prototype.hasOwnProperty.call(req.body, "assigned_to")
   } catch (e) {
     if (e.statusCode) {
       return res.status(e.statusCode).json({ error: e.message })
@@ -498,8 +592,12 @@ app.patch("/asset/:id", async (req, res) => {
   }
 
   try {
-    const requestHeaders = await getUserHeaders(req)
     await axios.patch(`${SNIPE_URL}/hardware/${req.params.id}`, payload, { headers: requestHeaders })
+
+    if (assignedToProvided) {
+      await updateAssetAssignment(req.params.id, assignedTo, requestHeaders)
+    }
+
     const updatedAsset = await fetchAssetById(req.params.id, requestHeaders)
 
     return res.json({ success: true, asset: mapAsset(updatedAsset) })
@@ -559,6 +657,119 @@ app.post("/home-office/baixa", async (req, res) => {
   }
 })
 
+app.get("/home-office/retorno-assets", async (req, res) => {
+  try {
+    const requestHeaders = await getUserHeaders(req)
+    const users = await fetchPaginatedRows("users", requestHeaders)
+    const homeOfficeUser = users.find((user) => {
+      const userName = String(user.name || user.username || "").trim().toLowerCase()
+
+      return userName === "home office" || userName.includes("home office")
+    })
+
+    if (!homeOfficeUser?.id) {
+      return res.status(404).json({ error: "Usuário Home Office não encontrado no Snipe-IT" })
+    }
+
+    const hardwareRows = await fetchPaginatedRows("hardware", requestHeaders)
+    const assignedRows = hardwareRows
+      .filter((asset) => parseIntegerField(asset?.assigned_to?.id) === parseIntegerField(homeOfficeUser.id))
+
+    const assignedAssetsDetails = await Promise.all(
+      assignedRows.map(async (asset) => fetchAssetById(asset.id, requestHeaders))
+    )
+
+    const assignedAssets = assignedAssetsDetails
+      .map((asset) => {
+        const mapped = mapAsset(asset)
+        const latestUpload = getLatestUpload(asset)
+
+        return {
+          ...mapped,
+          snipeUrl: buildSnipeAssetWebUrl(mapped.id),
+          latestUpload
+        }
+      })
+      .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "pt-BR", { sensitivity: "base" }))
+
+    return res.json({
+      success: true,
+      user: {
+        id: homeOfficeUser.id,
+        name: homeOfficeUser.name || homeOfficeUser.username || "Home Office"
+      },
+      total: assignedAssets.length,
+      assets: assignedAssets
+    })
+  } catch (e) {
+    if (e.statusCode) {
+      return res.status(e.statusCode).json({ error: e.message })
+    }
+
+    logApiError("GET /home-office/retorno-assets", e)
+    return res.status(getErrorStatusCode(e)).json(buildClientError(e, "Erro ao buscar ativos do usuário Home Office"))
+  }
+})
+
+app.post("/home-office/termo", express.raw({ type: "application/pdf", limit: "10mb" }), async (req, res) => {
+  const { asset, file_name: fileName, note } = req.query
+
+  if (asset === undefined || asset === null || asset === "") {
+    return res.status(400).json({ error: "Campo asset é obrigatório" })
+  }
+
+  const parsedAsset = parseIntegerField(asset)
+
+  if (parsedAsset === undefined) {
+    return res.status(400).json({ error: "asset deve ser um número válido" })
+  }
+
+  const pdfBuffer = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || "")
+
+  if (!pdfBuffer || pdfBuffer.length === 0) {
+    return res.status(400).json({ error: "O PDF gerado está vazio" })
+  }
+
+  const maxFileSize = 2 * 1024 * 1024
+
+  if (pdfBuffer.length > maxFileSize) {
+    return res.status(413).json({ error: "O arquivo PDF excede o limite de 2MB do Snipe-IT" })
+  }
+
+  const safeFileName = typeof fileName === "string" && fileName.trim()
+    ? fileName.trim()
+    : `termo-home-office-${parsedAsset}.pdf`
+
+  try {
+    const requestHeaders = await getUserHeaders(req)
+    const uploadHeaders = {
+      Authorization: requestHeaders.Authorization,
+      Accept: "application/json"
+    }
+    const formData = new FormData()
+    const blob = new Blob([pdfBuffer], { type: "application/pdf" })
+    formData.append("file[]", blob, safeFileName)
+
+    if (note !== undefined && note !== null && String(note).trim() !== "") {
+      formData.append("notes", String(note))
+    }
+
+    await axios.post(`${SNIPE_URL}/hardware/${parsedAsset}/files`, formData, {
+      headers: uploadHeaders,
+      validateStatus: (status) => status >= 200 && status < 300
+    })
+
+    return res.json({ success: true })
+  } catch (e) {
+    if (e.statusCode) {
+      return res.status(e.statusCode).json({ error: e.message })
+    }
+
+    logApiError("POST /home-office/termo", e)
+    return res.status(getErrorStatusCode(e)).json(buildClientError(e, "Erro ao anexar termo no ativo"))
+  }
+})
+
 app.post("/checkout", async (req, res) => {
   const { asset, user } = req.body
 
@@ -572,6 +783,7 @@ app.post("/checkout", async (req, res) => {
     await axios.post(
       `${SNIPE_URL}/hardware/${asset}/checkout`,
       {
+        checkout_to_type: "user",
         assigned_user: user
       },
       { headers: requestHeaders }

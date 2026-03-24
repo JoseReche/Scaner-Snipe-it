@@ -69,6 +69,7 @@ const baseAsset = {
   serial: 'S1',
   name: 'Notebook',
   status_label: { id: 2, name: 'Ativo' },
+  assigned_to: { id: 73, username: 'usr.estoque', name: 'estoque matriz' },
   location: { id: 3, name: 'Matriz' },
   rtd_location: { id: 4, name: 'PA-OLD' },
   custom_fields: {
@@ -142,20 +143,65 @@ test('buildAssetPayload usa db_column quando o custom field não expõe a propri
 
 
 
-test('buildAssetPayload inclui company_id e assigned_to como inteiros', async () => {
+test('buildAssetPayload inclui company_id como inteiro', async () => {
   const originalGet = axios.get
 
   axios.get = async () => ({ data: baseAsset })
 
   const payload = await buildAssetPayload(10, {
-    company_id: '11',
-    assigned_to: '22'
+    company_id: '11'
   })
 
   assert.equal(payload.company_id, 11)
-  assert.equal(payload.assigned_to, 22)
 
   axios.get = originalGet
+})
+
+test('PATCH /asset/:id identifica estado atual e faz checkin antes do checkout quando necessário', async () => {
+  const originalGet = axios.get
+  const originalPatch = axios.patch
+  const originalPost = axios.post
+  const postRequests = []
+
+  axios.get = async (url) => {
+    if (url.endsWith('/hardware/10')) {
+      return { data: baseAsset }
+    }
+
+    throw new Error(`URL inesperada no GET: ${url}`)
+  }
+
+  axios.patch = async () => ({ data: { status: 'success' } })
+  axios.post = async (url, payload) => {
+    postRequests.push({ url, payload })
+    return { data: { status: 'success' } }
+  }
+
+  const server = app.listen(0)
+  const { port } = server.address()
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/asset/10`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', ...authHeader() },
+      body: JSON.stringify({ status_id: '7', assigned_to: '22' })
+    })
+    const data = await response.json()
+
+    assert.equal(response.status, 200)
+    assert.equal(data.success, true)
+    assert.equal(postRequests.length, 2)
+    assert.match(postRequests[0].url, /\/hardware\/10\/checkin$/)
+    assert.deepEqual(postRequests[0].payload, {})
+    assert.match(postRequests[1].url, /\/hardware\/10\/checkout$/)
+    assert.equal(postRequests[1].payload.checkout_to_type, 'user')
+    assert.equal(postRequests[1].payload.assigned_user, 22)
+  } finally {
+    server.close()
+    axios.get = originalGet
+    axios.patch = originalPatch
+    axios.post = originalPost
+  }
 })
 
 test('PATCH /asset/:id aplica atualização e devolve ativo mapeado', async () => {
@@ -193,10 +239,57 @@ test('PATCH /asset/:id aplica atualização e devolve ativo mapeado', async () =
     assert.equal(requests[0].payload._snipeit_pa_1, 'PA-API')
     assert.equal(requests[0].payload.status_id, 7)
     assert.equal(requests[0].payload.custom_fields, undefined)
+    assert.equal(data.asset.assigned_to.id, 73)
+    assert.equal(data.asset.assigned_to.username, 'usr.estoque')
+    assert.equal(data.asset.assigned_to.name, 'estoque matriz')
   } finally {
     server.close()
     axios.get = originalGet
     axios.patch = originalPatch
+  }
+})
+
+test('PATCH /asset/:id com assigned_to vazio faz apenas checkin quando ativo está em checkout', async () => {
+  const originalGet = axios.get
+  const originalPatch = axios.patch
+  const originalPost = axios.post
+  const postRequests = []
+
+  axios.get = async (url) => {
+    if (url.endsWith('/hardware/10')) {
+      return { data: baseAsset }
+    }
+
+    throw new Error(`URL inesperada no GET: ${url}`)
+  }
+
+  axios.patch = async () => ({ data: { status: 'success' } })
+  axios.post = async (url, payload) => {
+    postRequests.push({ url, payload })
+    return { data: { status: 'success' } }
+  }
+
+  const server = app.listen(0)
+  const { port } = server.address()
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/asset/10`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', ...authHeader() },
+      body: JSON.stringify({ status_id: '7', assigned_to: '' })
+    })
+    const data = await response.json()
+
+    assert.equal(response.status, 200)
+    assert.equal(data.success, true)
+    assert.equal(postRequests.length, 1)
+    assert.match(postRequests[0].url, /\/hardware\/10\/checkin$/)
+    assert.deepEqual(postRequests[0].payload, {})
+  } finally {
+    server.close()
+    axios.get = originalGet
+    axios.patch = originalPatch
+    axios.post = originalPost
   }
 })
 
@@ -318,6 +411,102 @@ test('POST /home-office/baixa realiza checkin opcional e atualiza status do ativ
     axios.patch = originalPatch
   }
 })
+
+test('POST /home-office/termo envia PDF assinado para anexos do ativo', async () => {
+  const originalPost = axios.post
+  const calls = []
+
+  axios.post = async (url, payload) => {
+    calls.push({ url, payload })
+    return { data: { status: 'success' } }
+  }
+
+  const server = app.listen(0)
+  const { port } = server.address()
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/home-office/termo?asset=10&file_name=termo-home-office.pdf&note=Termo%20assinado`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/pdf', ...authHeader() },
+      body: Buffer.from('%PDF-1.4 teste')
+    })
+
+    const data = await response.json()
+
+    assert.equal(response.status, 200)
+    assert.equal(data.success, true)
+    assert.equal(calls.length, 1)
+    assert.match(calls[0].url, /\/hardware\/10\/files$/)
+    assert.equal(typeof calls[0].payload.append, 'function')
+  } finally {
+    server.close()
+    axios.post = originalPost
+  }
+})
+
+test('POST /home-office/termo retorna erro quando upload na API /files falha', async () => {
+  const originalPost = axios.post
+  const calls = []
+
+  axios.post = async (url, payload) => {
+    calls.push({ url, payload })
+    const error = new Error('Falha no endpoint API')
+    error.response = { status: 422, data: { messages: { file: ['The file field is required.'] } } }
+    throw error
+  }
+
+  const server = app.listen(0)
+  const { port } = server.address()
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${port}/home-office/termo?asset=10`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/pdf', ...authHeader() },
+      body: Buffer.from('%PDF-1.4 fallback')
+    })
+
+    const data = await response.json()
+
+    assert.equal(response.status, 422)
+    assert.match(data.error, /Erro ao anexar termo no ativo/)
+    assert.equal(calls.length, 1)
+    assert.match(calls[0].url, /\/hardware\/10\/files$/)
+  } finally {
+    server.close()
+    axios.post = originalPost
+  }
+})
+
+test('POST /home-office/termo bloqueia upload de PDF acima de 2MB', async () => {
+  const originalPost = axios.post
+  let called = false
+
+  axios.post = async () => {
+    called = true
+    return { data: { status: 'success' } }
+  }
+
+  const server = app.listen(0)
+  const { port } = server.address()
+
+  try {
+    const largePdf = Buffer.alloc((2 * 1024 * 1024) + 1, 0)
+    const response = await fetch(`http://127.0.0.1:${port}/home-office/termo?asset=10`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/pdf', ...authHeader() },
+      body: largePdf
+    })
+    const data = await response.json()
+
+    assert.equal(response.status, 413)
+    assert.match(data.error, /2MB/)
+    assert.equal(called, false)
+  } finally {
+    server.close()
+    axios.post = originalPost
+  }
+})
+
 test('POST /api/auth/register cria usuário e impede matrícula duplicada', async () => {
   const server = app.listen(0)
   const { port } = server.address()
