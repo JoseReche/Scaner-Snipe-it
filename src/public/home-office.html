@@ -331,33 +331,60 @@ function generateTermPdf() {
     const startDate = new Date(`${homeOfficeStartDate}T12:00:00`).toLocaleDateString('pt-BR')
     const issuedAt = new Date().toLocaleDateString('pt-BR')
 
-    pdf.setFontSize(14)
-    pdf.text('Termo de Uso - Home Office', margin, y)
-    y += 18
-    pdf.text('TERMO DE ENTREGA E CIÊNCIA', margin, y)
-    y += 18
-    pdf.text('TRABALHO REGIME HOME OFFICE', margin, y)
-    y += 28
+    pdf.setTextColor(38, 56, 60)
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(15)
+    pdf.text('TERMO DE ENTREGA E CIÊNCIA', 210, y)
+    y += 20
+    pdf.setFont('helvetica', 'bolditalic')
+    pdf.setFontSize(13)
+    pdf.text('TRABALHO REGIME HOME OFFICE', 220, y)
+    y += 35
 
-    pdf.setFontSize(11)
-    const intro = `Eu ${signerName}, inscrito no CPF sob nº ${signerCpf}, integrante do quadro de colaboradores da empresa SCHULZE ADVOGADOS ASSOCIADOS, onde exerço a função de ${signerRole}, manifesto ciência e concordância de que, a partir do dia ${startDate} e até posterior orientação, realizarei o desempenho de minhas funções em minha residência, conforme carga horária e escalas habituais, em regime de trabalho home office.`
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(12)
+    pdf.text('Eu', margin, y)
+    pdf.line(55, y + 2, 410, y + 2)
+    pdf.text(signerName, 60, y - 2)
+    pdf.text(', inscrito no CPF sob', 415, y)
+    y += 20
+    pdf.text('nº', margin, y)
+    pdf.line(55, y + 2, 230, y + 2)
+    pdf.text(signerCpf, 58, y - 2)
+    pdf.text(', integrante do quadro de colaboradores da empresa SCHULZE', 235, y)
+    y += 18
+    pdf.setFont('helvetica', 'bold')
+    pdf.text('ADVOGADOS ASSOCIADOS', margin, y)
+    pdf.setFont('helvetica', 'normal')
+    pdf.text(', onde exerço a função de', 190, y)
+    pdf.line(350, y + 2, 540, y + 2)
+    pdf.text(signerRole, 352, y - 2)
+    y += 18
+    pdf.text(`manifesto ciência e concordância de que, a partir do dia ${startDate} e até posterior`, margin, y)
+    y += 18
+    pdf.text('orientação, realizarei o desempenho de minhas funções em minha residência, conforme carga horária e', margin, y)
+    y += 18
+    pdf.text('escalas habituais, em regime de trabalho home office.', margin, y)
+    y += 30
+
     const sigilo = 'Comprometo-me a não divulgar, sem prévia, expressa e formal autorização do representante legal da empresa contratante, quaisquer informações de propriedade desta ou das instituições bancárias e seus demais clientes, respeitando tudo que disciplina o Regimento Interno da empresa e de segurança da informação e sigilo bancário, sob pena das penalidades já de conhecimento, como de praxe nas rotinas habituais.'
-    const comodato = 'Equipamentos recebidos e instalados em HOME, em regime de COMODATO, de propriedade da CONTRATANTE e que deverão ser restituídos à CONTRATANTE ao término do Projeto HOME:'
-
-    const introLines = pdf.splitTextToSize(intro, 515)
-    pdf.text(introLines, margin, y)
-    y += (introLines.length * 14) + 12
-
     const sigiloLines = pdf.splitTextToSize(sigilo, 515)
-    pdf.text(sigiloLines, margin, y)
-    y += (sigiloLines.length * 14) + 12
+    pdf.text(sigiloLines, margin + 18, y)
+    y += (sigiloLines.length * 15) + 10
 
-    const comodatoLines = pdf.splitTextToSize(comodato, 515)
-    pdf.text(comodatoLines, margin, y)
+    pdf.text('•', margin + 12, y)
+    const comodato = 'Equipamentos recebidos e instalados em HOME, em regime de COMODATO, de propriedade da CONTRATANTE e que deverão ser restituídos à CONTRATANTE ao término do Projeto HOME:'
+    const comodatoLines = pdf.splitTextToSize(comodato, 495)
+    pdf.text(comodatoLines, margin + 35, y)
     y += (comodatoLines.length * 14) + 14
 
-    const itens = [
-      'a. Computador/Notebook',
+    const tableX = margin
+    const tableY = y
+    const tableWidth = 515
+    const rowHeight = 18
+    const headersHeight = 24
+    const rows = [
+      'a. Computador/ Notebook',
       'b. Monitor',
       'c. Carregador',
       'd. Teclado',
@@ -367,31 +394,48 @@ function generateTermPdf() {
       'h. Régua de energia'
     ]
 
-    itens.forEach((item) => {
-      pdf.text(`• ${item}`, margin + 8, y)
-      y += 14
+    pdf.rect(tableX, tableY, tableWidth, headersHeight + (rows.length * rowHeight))
+    pdf.line(tableX + 430, tableY, tableX + 430, tableY + headersHeight + (rows.length * rowHeight))
+    pdf.line(tableX + 472, tableY + headersHeight, tableX + 472, tableY + headersHeight + (rows.length * rowHeight))
+    pdf.line(tableX, tableY + headersHeight, tableX + tableWidth, tableY + headersHeight)
+    pdf.text('Descrição', tableX + 215, tableY + 16)
+    pdf.text('Entregue', tableX + 448, tableY + 10)
+    pdf.text('SIM', tableX + 444, tableY + 22)
+    pdf.text('NÃO', tableX + 482, tableY + 22)
+
+    let rowY = tableY + headersHeight
+    rows.forEach((item, index) => {
+      rowY += rowHeight
+      pdf.line(tableX, rowY, tableX + tableWidth, rowY)
+      pdf.text(item, tableX + 8, rowY - 5)
+      pdf.text('X', tableX + 448, rowY - 5)
+      if (index === 1 || index === 6) {
+        pdf.text('X', tableX + 485, rowY - 5)
+      }
     })
-    y += 8
 
-    pdf.text(`Obs.: Nº Patrimônio: ${assetPatrimonio || '-'}`, margin, y)
-    y += 14
-    pdf.text(`Headset: ${assetHeadset || '-'}`, margin, y)
-    y += 14
-    pdf.text(`Monitor: ${assetMonitor || '-'}`, margin, y)
-    y += 24
+    y = tableY + headersHeight + (rows.length * rowHeight) + 12
+    pdf.rect(tableX, y, 380, 86)
+    pdf.rect(tableX + 380, y, 135, 86)
+    pdf.text('Obs.: No caso de entrega de outros equipamentos, descreva:', tableX + 6, y + 18)
+    pdf.text('Nº Patrimônio', tableX + 420, y + 18)
+    pdf.line(tableX + 380, y + 28, tableX + 515, y + 28)
+    pdf.line(tableX + 380, y + 48, tableX + 515, y + 48)
+    pdf.line(tableX + 380, y + 67, tableX + 515, y + 67)
+    pdf.text(assetPatrimonio || '-', tableX + 386, y + 42)
+    pdf.text(`HeadSet: ${assetHeadset || ''}`, tableX + 386, y + 62)
+    pdf.text(`Monitor: ${assetMonitor || ''}`, tableX + 386, y + 81)
 
+    y += 112
     const fechamento = 'Declaro ciência do meu dever em zelar pelos equipamentos recebidos e autorizo o desconto em folha de pagamento referentes a eventuais danos causados por mau uso, conforme descrito nos artigos 5º e 6º do Regimento Interno.'
     const fechamentoLines = pdf.splitTextToSize(fechamento, 515)
-    pdf.text(fechamentoLines, margin, y)
-    y += (fechamentoLines.length * 14) + 24
+    pdf.text(fechamentoLines, margin + 14, y)
+    y += (fechamentoLines.length * 14) + 18
 
     const signatureDataUrl = signaturePad.canvas.toDataURL('image/png')
-    pdf.addImage(signatureDataUrl, 'PNG', margin, y, 280, 90)
-    y += 110
-
-    pdf.text(`Assinatura: ${signerName}`, margin, y)
-    y += 16
-    pdf.text(`${signatureCity}, ${issuedAt}`, margin, y)
+    pdf.addImage(signatureDataUrl, 'PNG', margin, y, 220, 72)
+    pdf.text(`Assinatura: ${signerName}`, margin + 230, y + 32)
+    pdf.text(`${signatureCity}, ${issuedAt}`, margin + 230, y + 52)
 
     const pdfBlob = pdf.output('blob')
     const maxUploadSize = 2 * 1024 * 1024
