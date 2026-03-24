@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Baixa de Kit Home Office</title>
+<title>Baixa Home Office</title>
 <link rel="stylesheet" href="/auth.css" />
 <script src="https://unpkg.com/html5-qrcode"></script>
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
@@ -11,13 +11,14 @@
 <body>
 <div class="container">
   <div class="topbar">
-    <h3>Baixa de Kit Home Office</h3>
+    <h3>Baixa Home Office</h3>
     <div class="menu-wrapper">
       <button id="menu-toggle" class="menu-toggle" type="button" aria-label="Abrir menu">☰</button>
       <nav id="menu-panel" class="menu-panel" aria-label="Navegação principal">
         <a href="/scanner">Scanner</a>
         <a href="/scanner-pa">Scanner PA</a>
         <a href="/home-office">Baixa Home Office</a>
+        <a href="/retorno-home-office">Retorno Home Office</a>
         <a href="/usuario">Usuário</a>
         <a href="/dashboard">Dashboard</a>
         <a href="#" onclick="logout(event)">Sair</a>
@@ -63,16 +64,18 @@
         <input id="signerRole" placeholder="Ex.: Auxiliar Administrativo">
 
         <label>Data de início do home office</label>
-        <input id="homeOfficeStartDate" type="date">
+        <input id="homeOfficeStartDate" type="date" readonly>
 
         <label>Cidade (assinatura)</label>
-        <input id="signatureCity" placeholder="Ex.: Joinville">
+        <input id="signatureCity" list="signatureCityList" placeholder="Digite para buscar cidade">
+        <datalist id="signatureCityList">
+          <option value="Joinville"></option>
+          <option value="São Paulo"></option>
+          <option value="Curitiba"></option>
+        </datalist>
 
         <label>Nº Patrimônio</label>
         <input id="assetPatrimonio" placeholder="Ex.: NT013050" readonly>
-
-        <label>Headset (opcional)</label>
-        <input id="assetHeadset" placeholder="Ex.: SN-1234">
 
         <label>Monitor (opcional)</label>
         <input id="assetMonitor" placeholder="Ex.: SN-9988">
@@ -96,8 +99,7 @@
         <canvas id="signatureCanvas" width="560" height="180" style="width:100%;border:1px solid #ccc;border-radius:6px;background:#fff;"></canvas>
         <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
           <button type="button" onclick="clearSignature()">Limpar assinatura</button>
-          <button id="generatePdfButton" type="button" onclick="generateTermPdf()">Gerar PDF</button>
-          <button id="uploadPdfButton" type="button" onclick="uploadGeneratedTermPdf()" disabled>Anexar PDF no ativo</button>
+          <button id="generatePdfButton" type="button" onclick="generateTermPdf()">Gerar PDF e anexar</button>
         </div>
 
         <div id="pdfPreviewContainer" style="display:none;margin-top:14px;">
@@ -141,6 +143,16 @@ const authHeaders = (extra = {}) => ({
   ...extra,
   Authorization: `Bearer ${getJwtToken()}`
 })
+
+function getTodayIsoDate() {
+  const now = new Date()
+  const timezoneOffsetInMs = now.getTimezoneOffset() * 60 * 1000
+  return new Date(now.getTime() - timezoneOffsetInMs).toISOString().split('T')[0]
+}
+
+function applyTodayToHomeOfficeDate() {
+  byId('homeOfficeStartDate').value = getTodayIsoDate()
+}
 
 function logout(event) {
   if (event) event.preventDefault()
@@ -194,7 +206,6 @@ async function loadAsset(assetId) {
   }
   byId('pdfPreviewFrame').src = ''
   byId('pdfPreviewContainer').style.display = 'none'
-  byId('uploadPdfButton').disabled = true
   fillPanel(data)
 }
 
@@ -289,7 +300,7 @@ function signatureHasInk() {
   return false
 }
 
-function generateTermPdf() {
+async function generateTermPdf() {
   if (!currentAssetId) {
     alert('Primeiro selecione um ativo')
     return
@@ -298,22 +309,22 @@ function generateTermPdf() {
   const signerName = byId('signerName').value.trim()
   const signerCpf = byId('signerCpf').value.trim()
   const signerRole = byId('signerRole').value.trim()
+  applyTodayToHomeOfficeDate()
   const homeOfficeStartDate = byId('homeOfficeStartDate').value
   const signatureCity = byId('signatureCity').value.trim()
-    const assetPatrimonio = byId('assetPatrimonio').value.trim()
-    const assetHeadset = byId('assetHeadset').value.trim()
-    const assetMonitor = byId('assetMonitor').value.trim()
-    const termObservation = byId('termObservation').value.trim()
-    const deliveryItems = [
-      { id: 'item-computador', label: 'a. Computador/ Notebook' },
-      { id: 'item-monitor', label: 'b. Monitor' },
-      { id: 'item-carregador', label: 'c. Carregador' },
-      { id: 'item-teclado', label: 'd. Teclado' },
-      { id: 'item-mouse', label: 'e. Mouse' },
-      { id: 'item-headset', label: 'f. Headset + base' },
-      { id: 'item-cabos', label: 'g. Cabos de Conexão de energia e rede' },
-      { id: 'item-regua', label: 'h. Régua de energia' }
-    ]
+  const assetPatrimonio = byId('assetPatrimonio').value.trim()
+  const assetMonitor = byId('assetMonitor').value.trim()
+  const termObservation = byId('termObservation').value.trim()
+  const deliveryItems = [
+    { id: 'item-computador', label: 'a. Computador/ Notebook' },
+    { id: 'item-monitor', label: 'b. Monitor' },
+    { id: 'item-carregador', label: 'c. Carregador' },
+    { id: 'item-teclado', label: 'd. Teclado' },
+    { id: 'item-mouse', label: 'e. Mouse' },
+    { id: 'item-headset', label: 'f. Headset + base' },
+    { id: 'item-cabos', label: 'g. Cabos de Conexão de energia e rede' },
+    { id: 'item-regua', label: 'h. Régua de energia' }
+  ]
 
   if (!signerName) {
     alert('Informe o nome do colaborador para assinatura')
@@ -347,7 +358,7 @@ function generateTermPdf() {
 
   const generateButton = byId('generatePdfButton')
   generateButton.disabled = true
-  generateButton.textContent = 'Gerando PDF...'
+  generateButton.textContent = 'Gerando e anexando PDF...'
 
   try {
     const { jsPDF } = window.jspdf
@@ -445,8 +456,7 @@ function generateTermPdf() {
     pdf.line(tableX + 380, y + 48, tableX + 515, y + 48)
     pdf.line(tableX + 380, y + 67, tableX + 515, y + 67)
     pdf.text(assetPatrimonio || '-', tableX + 386, y + 42)
-    pdf.text(`HeadSet: ${assetHeadset || ''}`, tableX + 386, y + 62)
-    pdf.text(`Monitor: ${assetMonitor || ''}`, tableX + 386, y + 81)
+    pdf.text(`Monitor: ${assetMonitor || ''}`, tableX + 386, y + 62)
 
     y += 112
     const fechamento = 'Declaro ciência do meu dever em zelar pelos equipamentos recebidos e autorizo o desconto em folha de pagamento referentes a eventuais danos causados por mau uso, conforme descrito nos artigos 5º e 6º do Regimento Interno.'
@@ -478,30 +488,40 @@ function generateTermPdf() {
     generatedTermPdfUrl = URL.createObjectURL(pdfBlob)
     byId('pdfPreviewFrame').src = generatedTermPdfUrl
     byId('pdfPreviewContainer').style.display = 'block'
-    byId('uploadPdfButton').disabled = false
-    alert('PDF gerado com sucesso e exibido na tela. Agora clique em "Anexar PDF no ativo".')
+
+    const uploadSuccess = await uploadGeneratedTermPdf({ silentSuccess: true })
+
+    if (!uploadSuccess) {
+      alert('PDF gerado, mas não foi possível anexar automaticamente. Tente gerar novamente.')
+      return
+    }
+
+    const updateSuccess = await applyHomeOfficeAssetUpdate({ silentSuccess: true })
+
+    if (!updateSuccess) {
+      alert('PDF anexado com sucesso, mas não foi possível atualizar o ativo automaticamente.')
+      return
+    }
+
+    alert('PDF gerado, anexado e ativo atualizado com sucesso.')
   } catch (error) {
     alert(`Erro ao gerar PDF: ${error.message}`)
   } finally {
     generateButton.disabled = false
-    generateButton.textContent = 'Gerar PDF'
+    generateButton.textContent = 'Gerar PDF e anexar'
   }
 }
 
-async function uploadGeneratedTermPdf() {
+async function uploadGeneratedTermPdf({ silentSuccess = false } = {}) {
   if (!currentAssetId) {
     alert('Primeiro selecione um ativo')
-    return
+    return false
   }
 
   if (!generatedTermPdfBlob || !generatedTermPdfName) {
     alert('Gere o PDF antes de anexar')
-    return
+    return false
   }
-
-  const uploadButton = byId('uploadPdfButton')
-  uploadButton.disabled = true
-  uploadButton.textContent = 'Anexando PDF...'
 
   try {
     const signerName = byId('signerName').value.trim()
@@ -528,20 +548,70 @@ async function uploadGeneratedTermPdf() {
 
     if (response.status === 401 && isAuthTokenError(data)) {
       logout()
-      return
+      return false
     }
 
     if (!response.ok) {
       alert(data.error || 'Falha ao anexar termo no ativo')
-      return
+      return false
     }
 
-    alert('PDF anexado com sucesso no ativo')
+    if (!silentSuccess) {
+      alert('PDF anexado com sucesso no ativo')
+    }
+
+    return true
   } catch (error) {
     alert(`Erro ao anexar PDF: ${error.message}`)
-  } finally {
-    uploadButton.disabled = false
-    uploadButton.textContent = 'Anexar PDF no ativo'
+    return false
+  }
+}
+
+async function applyHomeOfficeAssetUpdate({ silentSuccess = false } = {}) {
+  if (!currentAssetId) {
+    alert('Primeiro selecione um ativo')
+    return false
+  }
+
+  try {
+    const payload = {
+      pa: '0',
+      status_id: '7',
+      location_id: '93',
+      rtd_location_id: '93',
+      company_id: '2',
+      assigned_to: '170',
+      notes: byId('termObservation').value.trim()
+    }
+
+    const response = await fetch(`/asset/${currentAssetId}`, {
+      method: 'PATCH',
+      headers: authHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(payload)
+    })
+
+    const data = await response.json()
+
+    if (response.status === 401 && isAuthTokenError(data)) {
+      logout()
+      return false
+    }
+
+    if (!response.ok) {
+      alert(data.error || 'Falha ao atualizar ativo para Home Office')
+      return false
+    }
+
+    fillPanel(data.asset)
+
+    if (!silentSuccess) {
+      alert('Ativo atualizado para Home Office')
+    }
+
+    return true
+  } catch (error) {
+    alert(`Erro ao atualizar ativo: ${error.message}`)
+    return false
   }
 }
 
@@ -560,6 +630,7 @@ async function startScanner() {
 }
 
 setupSignaturePad()
+applyTodayToHomeOfficeDate()
 </script>
 </body>
 </html>

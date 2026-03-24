@@ -120,6 +120,7 @@ let scanner=null
 let scanning=false
 let lastScan=null
 let toastTimer=null
+const selectSearchTerms={}
 
 const byId=(id)=>document.getElementById(id)
 
@@ -174,7 +175,41 @@ select.appendChild(el)
 })
 
 if(selectedValue!==undefined && selectedValue!==null && selectedValue!=="") select.value=String(selectedValue)
+applySelectSearchFilter(selectId)
 
+}
+
+function applySelectSearchFilter(selectId){
+const select=byId(selectId)
+if(!select) return
+const searchTerm=(selectSearchTerms[selectId]||"").toLowerCase().trim()
+
+for(const option of select.options){
+if(option.value===""){
+option.hidden=false
+continue
+}
+
+const matches=!searchTerm || option.textContent.toLowerCase().includes(searchTerm)
+option.hidden=!matches
+}
+}
+
+function setupSearchableSelect(selectId,label){
+const select=byId(selectId)
+if(!select) return
+
+const searchInput=document.createElement("input")
+searchInput.type="text"
+searchInput.placeholder=`Buscar ${label}`
+searchInput.style.marginBottom="6px"
+
+searchInput.addEventListener("input",()=>{
+selectSearchTerms[selectId]=searchInput.value
+applySelectSearchFilter(selectId)
+})
+
+select.parentNode.insertBefore(searchInput,select)
 }
 
 function sortOptionsAlphaNumeric(options){
@@ -395,6 +430,12 @@ btn.textContent="Salvar alterações"
 showSideToast("Ativo atualizado com sucesso")
 
 }
+
+setupSearchableSelect("editStatus","status")
+setupSearchableSelect("editLocation","local")
+setupSearchableSelect("editRTD","local padrão")
+setupSearchableSelect("editCompany","empresa")
+setupSearchableSelect("editAssignedTo","usuário")
 
 </script>
 

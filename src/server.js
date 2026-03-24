@@ -28,7 +28,8 @@ const htmlRoutes = {
   "/dashboard": "dashboard.html",
   "/register": "register.html",
   "/change-password": "change-password.html",
-  "/home-office": "home-office.html"
+  "/home-office": "home-office.html",
+  "/retorno-home-office": "retorno-home-office.html"
 }
 
 for (const [routePath, fileName] of Object.entries(htmlRoutes)) {
@@ -53,6 +54,7 @@ const PORT = process.env.PORT || 3000
 const DEFAULT_PA_FIELD_KEY = process.env.SNIPE_PA_FIELD_KEY || "_snipeit_pa_6"
 
 const hasValidConfig = !SNIPE_URL.includes("SEU-SNIPE")
+const SNIPE_WEB_BASE_URL = SNIPE_URL.replace(/\/api\/v\d+\/?$/i, "")
 
 const buildHeadersFromApiKey = (apiKey) => ({
   Authorization: `Bearer ${apiKey}`,
@@ -127,6 +129,42 @@ const mapAsset = (asset) => ({
     Object.entries(asset.custom_fields || {}).map(([key, value]) => [key, value.value ?? null])
   )
 })
+
+const parseDateValue = (value) => {
+  if (!value) return 0
+  const parsed = new Date(value).getTime()
+  return Number.isNaN(parsed) ? 0 : parsed
+}
+
+const getLatestUpload = (asset) => {
+  const uploads = Array.isArray(asset?.uploads) ? asset.uploads : []
+
+  if (uploads.length === 0) {
+    return null
+  }
+
+  const latestUpload = uploads
+    .slice()
+    .sort((a, b) => parseDateValue(b?.created_at?.datetime || b?.created_at || b?.updated_at) - parseDateValue(a?.created_at?.datetime || a?.created_at || a?.updated_at))[0]
+
+  if (!latestUpload) {
+    return null
+  }
+
+  return {
+    id: latestUpload.id ?? null,
+    name: latestUpload.display_name || latestUpload.filename || latestUpload.name || "Documento anexado",
+    url: buildAbsoluteSnipeUrl(latestUpload.url || latestUpload.file_path || null),
+    createdAt: latestUpload.created_at?.datetime || latestUpload.created_at || null
+  }
+}
+
+const buildSnipeAssetWebUrl = (assetId) => `${SNIPE_WEB_BASE_URL}/hardware/${assetId}`
+const buildAbsoluteSnipeUrl = (rawUrl) => {
+  if (!rawUrl) return null
+  if (/^https?:\/\//i.test(rawUrl)) return rawUrl
+  return `${SNIPE_WEB_BASE_URL}${rawUrl.startsWith("/") ? "" : "/"}${rawUrl}`
+}
 
 const fetchAssetById = async (id, requestHeaders) => {
   const response = await axios.get(`${SNIPE_URL}/hardware/${id}`, { headers: requestHeaders })
@@ -616,6 +654,60 @@ app.post("/home-office/baixa", async (req, res) => {
 
     logApiError("POST /home-office/baixa", e)
     return res.status(getErrorStatusCode(e)).json(buildClientError(e, "Erro ao realizar baixa do kit home office"))
+  }
+})
+
+app.get("/home-office/retorno-assets", async (req, res) => {
+  try {
+    const requestHeaders = await getUserHeaders(req)
+    const users = await fetchPaginatedRows("users", requestHeaders)
+    const homeOfficeUser = users.find((user) => {
+      const userName = String(user.name || user.username || "").trim().toLowerCase()
+
+      return userName === "home office" || userName.includes("home office")
+    })
+
+    if (!homeOfficeUser?.id) {
+      return res.status(404).json({ error: "Usuário Home Office não encontrado no Snipe-IT" })
+    }
+
+    const hardwareRows = await fetchPaginatedRows("hardware", requestHeaders)
+    const assignedRows = hardwareRows
+      .filter((asset) => parseIntegerField(asset?.assigned_to?.id) === parseIntegerField(homeOfficeUser.id))
+
+    const assignedAssetsDetails = await Promise.all(
+      assignedRows.map(async (asset) => fetchAssetById(asset.id, requestHeaders))
+    )
+
+    const assignedAssets = assignedAssetsDetails
+      .map((asset) => {
+        const mapped = mapAsset(asset)
+        const latestUpload = getLatestUpload(asset)
+
+        return {
+          ...mapped,
+          snipeUrl: buildSnipeAssetWebUrl(mapped.id),
+          latestUpload
+        }
+      })
+      .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "pt-BR", { sensitivity: "base" }))
+
+    return res.json({
+      success: true,
+      user: {
+        id: homeOfficeUser.id,
+        name: homeOfficeUser.name || homeOfficeUser.username || "Home Office"
+      },
+      total: assignedAssets.length,
+      assets: assignedAssets
+    })
+  } catch (e) {
+    if (e.statusCode) {
+      return res.status(e.statusCode).json({ error: e.message })
+    }
+
+    logApiError("GET /home-office/retorno-assets", e)
+    return res.status(getErrorStatusCode(e)).json(buildClientError(e, "Erro ao buscar ativos do usuário Home Office"))
   }
 })
 
