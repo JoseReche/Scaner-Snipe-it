@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#111827"/>
+  <text x="640" y="60" text-anchor="middle" fill="#f9fafb" font-family="Arial" font-size="34" font-weight="700">Fluxo de Configuração Segura</text>
+
+  <rect x="80" y="130" rx="16" ry="16" width="240" height="120" fill="#1f2937" stroke="#60a5fa" stroke-width="3"/>
+  <text x="200" y="185" text-anchor="middle" fill="#dbeafe" font-family="Arial" font-size="22" font-weight="700">1. Pré-requisitos</text>
+  <text x="200" y="212" text-anchor="middle" fill="#93c5fd" font-family="Arial" font-size="15">Node 20+, npm, rede</text>
+
+  <rect x="370" y="130" rx="16" ry="16" width="240" height="120" fill="#1f2937" stroke="#34d399" stroke-width="3"/>
+  <text x="490" y="185" text-anchor="middle" fill="#d1fae5" font-family="Arial" font-size="22" font-weight="700">2. Variáveis</text>
+  <text x="490" y="212" text-anchor="middle" fill="#6ee7b7" font-family="Arial" font-size="15">.env com segredos</text>
+
+  <rect x="660" y="130" rx="16" ry="16" width="240" height="120" fill="#1f2937" stroke="#f59e0b" stroke-width="3"/>
+  <text x="780" y="185" text-anchor="middle" fill="#fef3c7" font-family="Arial" font-size="22" font-weight="700">3. Dependências</text>
+  <text x="780" y="212" text-anchor="middle" fill="#fcd34d" font-family="Arial" font-size="15">npm ci em /src</text>
+
+  <rect x="950" y="130" rx="16" ry="16" width="240" height="120" fill="#1f2937" stroke="#f472b6" stroke-width="3"/>
+  <text x="1070" y="185" text-anchor="middle" fill="#fce7f3" font-family="Arial" font-size="22" font-weight="700">4. Inicialização</text>
+  <text x="1070" y="212" text-anchor="middle" fill="#f9a8d4" font-family="Arial" font-size="15">npm start</text>
+
+  <rect x="220" y="410" rx="16" ry="16" width="360" height="160" fill="#1f2937" stroke="#22d3ee" stroke-width="3"/>
+  <text x="400" y="462" text-anchor="middle" fill="#cffafe" font-family="Arial" font-size="24" font-weight="700">5. Validação</text>
+  <text x="400" y="492" text-anchor="middle" fill="#67e8f9" font-family="Arial" font-size="16">npm run check + npm test</text>
+  <text x="400" y="517" text-anchor="middle" fill="#67e8f9" font-family="Arial" font-size="16">checagem das rotas /api/auth</text>
+
+  <rect x="700" y="410" rx="16" ry="16" width="360" height="160" fill="#1f2937" stroke="#a78bfa" stroke-width="3"/>
+  <text x="880" y="462" text-anchor="middle" fill="#ede9fe" font-family="Arial" font-size="24" font-weight="700">6. Operação Segura</text>
+  <text x="880" y="492" text-anchor="middle" fill="#c4b5fd" font-family="Arial" font-size="16">backup do SQLite</text>
+  <text x="880" y="517" text-anchor="middle" fill="#c4b5fd" font-family="Arial" font-size="16">rotação de JWT/ENCRYPTION_KEY</text>
+
+  <line x1="320" y1="190" x2="370" y2="190" stroke="#9ca3af" stroke-width="4" marker-end="url(#arrow2)"/>
+  <line x1="610" y1="190" x2="660" y2="190" stroke="#9ca3af" stroke-width="4" marker-end="url(#arrow2)"/>
+  <line x1="900" y1="190" x2="950" y2="190" stroke="#9ca3af" stroke-width="4" marker-end="url(#arrow2)"/>
+  <line x1="1020" y1="250" x2="920" y2="410" stroke="#9ca3af" stroke-width="4" marker-end="url(#arrow2)"/>
+  <line x1="760" y1="250" x2="500" y2="410" stroke="#9ca3af" stroke-width="4" marker-end="url(#arrow2)"/>
+
+  <defs>
+    <marker id="arrow2" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#9ca3af"/>
+    </marker>
+  </defs>
+</svg>

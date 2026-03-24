@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#0f172a"/>
+  <text x="640" y="60" text-anchor="middle" fill="#e2e8f0" font-family="Arial" font-size="34" font-weight="700">Fluxo de Uso do Scaner Snipe-IT</text>
+
+  <rect x="90" y="130" rx="18" ry="18" width="260" height="120" fill="#1d4ed8"/>
+  <text x="220" y="182" text-anchor="middle" fill="white" font-family="Arial" font-size="24" font-weight="700">1. Login</text>
+  <text x="220" y="212" text-anchor="middle" fill="#dbeafe" font-family="Arial" font-size="16">/login</text>
+
+  <rect x="510" y="130" rx="18" ry="18" width="260" height="120" fill="#0f766e"/>
+  <text x="640" y="182" text-anchor="middle" fill="white" font-family="Arial" font-size="24" font-weight="700">2. Scanner</text>
+  <text x="640" y="212" text-anchor="middle" fill="#ccfbf1" font-family="Arial" font-size="16">/scanner | /scanner-pa</text>
+
+  <rect x="930" y="130" rx="18" ry="18" width="260" height="120" fill="#7c3aed"/>
+  <text x="1060" y="182" text-anchor="middle" fill="white" font-family="Arial" font-size="24" font-weight="700">3. Detalhes</text>
+  <text x="1060" y="212" text-anchor="middle" fill="#ede9fe" font-family="Arial" font-size="16">ativo + histórico</text>
+
+  <rect x="300" y="410" rx="18" ry="18" width="300" height="140" fill="#b45309"/>
+  <text x="450" y="463" text-anchor="middle" fill="white" font-family="Arial" font-size="24" font-weight="700">4. Movimentação</text>
+  <text x="450" y="493" text-anchor="middle" fill="#ffedd5" font-family="Arial" font-size="16">check-in / check-out / PA</text>
+  <text x="450" y="518" text-anchor="middle" fill="#ffedd5" font-family="Arial" font-size="16">com validação de status</text>
+
+  <rect x="700" y="410" rx="18" ry="18" width="300" height="140" fill="#be123c"/>
+  <text x="850" y="463" text-anchor="middle" fill="white" font-family="Arial" font-size="24" font-weight="700">5. Home Office</text>
+  <text x="850" y="493" text-anchor="middle" fill="#ffe4e6" font-family="Arial" font-size="16">gerar/anexar termo PDF</text>
+  <text x="850" y="518" text-anchor="middle" fill="#ffe4e6" font-family="Arial" font-size="16">retorno de ativos</text>
+
+  <line x1="350" y1="190" x2="510" y2="190" stroke="#94a3b8" stroke-width="5" marker-end="url(#arrow)"/>
+  <line x1="770" y1="190" x2="930" y2="190" stroke="#94a3b8" stroke-width="5" marker-end="url(#arrow)"/>
+  <line x1="980" y1="250" x2="900" y2="410" stroke="#94a3b8" stroke-width="5" marker-end="url(#arrow)"/>
+  <line x1="560" y1="250" x2="500" y2="410" stroke="#94a3b8" stroke-width="5" marker-end="url(#arrow)"/>
+
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#94a3b8"/>
+    </marker>
+  </defs>
+</svg>

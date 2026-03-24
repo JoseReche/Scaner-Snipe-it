@@ -3,6 +3,7 @@ const dotenv = require("dotenv")
 const express = require("express")
 const axios = require("axios")
 const cors = require("cors")
+const helmet = require("helmet")
 const { authRouter } = require("./routes/authRoutes")
 const { sipeRouter } = require("./routes/sipeRoutes")
 const { authMiddleware } = require("./middleware/authMiddleware")
@@ -14,7 +15,43 @@ dotenv.config({ path: path.join(__dirname, "..", ".env") })
 const app = express()
 
 app.disable("x-powered-by")
-app.use(cors())
+const parseAllowedOrigins = () => {
+  const raw = process.env.CORS_ALLOWED_ORIGINS
+
+  if (!raw || !raw.trim()) {
+    return []
+  }
+
+  return raw
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean)
+}
+
+const allowedOrigins = parseAllowedOrigins()
+
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false
+}))
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin) {
+      callback(null, true)
+      return
+    }
+
+    if (allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
+      callback(null, true)
+      return
+    }
+
+    callback(new Error("Origem não permitida pelo CORS"))
+  },
+  methods: ["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Authorization", "Content-Type"],
+  credentials: false
+}))
 app.use(express.json({ limit: "10mb" }))
 
 const publicDir = path.join(__dirname, "public")

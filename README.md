@@ -13,8 +13,9 @@ cp .env.example .env
 2. Edite o `.env`:
 
 - `JWT_SECRET`
-- `SIPE_API_BASE`
 - `SNIPE_URL`
+- `ENCRYPTION_KEY`
+- `CORS_ALLOWED_ORIGINS` (recomendado em produção)
 
 3. Instale dependências:
 
@@ -52,9 +53,16 @@ npm install
 
 - API token nunca é salvo em texto puro: é criptografado com AES-256-GCM + chave derivada via scrypt (com salt aleatório por registro).
 - Senhas são armazenadas apenas como hash bcrypt.
+- Headers de segurança HTTP via `helmet`.
+- CORS com whitelist por variável de ambiente (`CORS_ALLOWED_ORIGINS`).
 - O serviço lê/salva apenas os campos mínimos do usuário (`matricula`, `password_hash`, `api_key_encrypted`).
 - O armazenamento de usuários é exclusivamente em SQLite (`users.sqlite`), sem persistência em JSON.
 - `ENCRYPTION_KEY` precisa ter no mínimo 16 caracteres (recomendado 32+).
+
+## Documentação
+
+- Manual do usuário: `docs/USO_DO_SISTEMA.md`
+- Manual de configuração/administração: `docs/CONFIGURACAO_DO_SISTEMA.md`
 
 ## Frontend
 
