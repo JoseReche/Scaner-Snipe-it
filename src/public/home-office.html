@@ -69,13 +69,28 @@
         <input id="signatureCity" placeholder="Ex.: Joinville">
 
         <label>Nº Patrimônio</label>
-        <input id="assetPatrimonio" placeholder="Ex.: NT013050">
+        <input id="assetPatrimonio" placeholder="Ex.: NT013050" readonly>
 
         <label>Headset (opcional)</label>
         <input id="assetHeadset" placeholder="Ex.: SN-1234">
 
         <label>Monitor (opcional)</label>
         <input id="assetMonitor" placeholder="Ex.: SN-9988">
+
+        <label>Itens entregues (marque os que serão entregues)</label>
+        <div id="deliveryChecklist" style="display:grid;grid-template-columns:1fr 1fr;gap:6px 12px;margin-bottom:10px;">
+          <label><input type="checkbox" id="item-computador" checked style="width:auto;"> Computador/Notebook</label>
+          <label><input type="checkbox" id="item-monitor" checked style="width:auto;"> Monitor</label>
+          <label><input type="checkbox" id="item-carregador" checked style="width:auto;"> Carregador</label>
+          <label><input type="checkbox" id="item-teclado" checked style="width:auto;"> Teclado</label>
+          <label><input type="checkbox" id="item-mouse" checked style="width:auto;"> Mouse</label>
+          <label><input type="checkbox" id="item-headset" checked style="width:auto;"> Headset + base</label>
+          <label><input type="checkbox" id="item-cabos" checked style="width:auto;"> Cabos de energia/rede</label>
+          <label><input type="checkbox" id="item-regua" checked style="width:auto;"> Régua de energia</label>
+        </div>
+
+        <label>Observação</label>
+        <textarea id="termObservation" rows="3" placeholder="Ex.: itens adicionais, condições do equipamento, etc."></textarea>
 
         <label>Assinatura</label>
         <canvas id="signatureCanvas" width="560" height="180" style="width:100%;border:1px solid #ccc;border-radius:6px;background:#fff;"></canvas>
@@ -170,6 +185,7 @@ async function loadAsset(assetId) {
 
   currentAssetId = data.id
   byId('manualAsset').value = data.id
+  byId('assetPatrimonio').value = data.assetTag || data.id || ''
   generatedTermPdfBlob = null
   generatedTermPdfName = null
   if (generatedTermPdfUrl) {
@@ -284,9 +300,20 @@ function generateTermPdf() {
   const signerRole = byId('signerRole').value.trim()
   const homeOfficeStartDate = byId('homeOfficeStartDate').value
   const signatureCity = byId('signatureCity').value.trim()
-  const assetPatrimonio = byId('assetPatrimonio').value.trim()
-  const assetHeadset = byId('assetHeadset').value.trim()
-  const assetMonitor = byId('assetMonitor').value.trim()
+    const assetPatrimonio = byId('assetPatrimonio').value.trim()
+    const assetHeadset = byId('assetHeadset').value.trim()
+    const assetMonitor = byId('assetMonitor').value.trim()
+    const termObservation = byId('termObservation').value.trim()
+    const deliveryItems = [
+      { id: 'item-computador', label: 'a. Computador/ Notebook' },
+      { id: 'item-monitor', label: 'b. Monitor' },
+      { id: 'item-carregador', label: 'c. Carregador' },
+      { id: 'item-teclado', label: 'd. Teclado' },
+      { id: 'item-mouse', label: 'e. Mouse' },
+      { id: 'item-headset', label: 'f. Headset + base' },
+      { id: 'item-cabos', label: 'g. Cabos de Conexão de energia e rede' },
+      { id: 'item-regua', label: 'h. Régua de energia' }
+    ]
 
   if (!signerName) {
     alert('Informe o nome do colaborador para assinatura')
@@ -383,16 +410,7 @@ function generateTermPdf() {
     const tableWidth = 515
     const rowHeight = 18
     const headersHeight = 24
-    const rows = [
-      'a. Computador/ Notebook',
-      'b. Monitor',
-      'c. Carregador',
-      'd. Teclado',
-      'e. Mouse',
-      'f. Headset + base',
-      'g. Cabos de Conexão de energia e rede',
-      'h. Régua de energia'
-    ]
+    const rows = deliveryItems.map((item) => item.label)
 
     pdf.rect(tableX, tableY, tableWidth, headersHeight + (rows.length * rowHeight))
     pdf.line(tableX + 430, tableY, tableX + 430, tableY + headersHeight + (rows.length * rowHeight))
@@ -408,8 +426,10 @@ function generateTermPdf() {
       rowY += rowHeight
       pdf.line(tableX, rowY, tableX + tableWidth, rowY)
       pdf.text(item, tableX + 8, rowY - 5)
-      pdf.text('X', tableX + 448, rowY - 5)
-      if (index === 1 || index === 6) {
+      const isDelivered = byId(deliveryItems[index].id).checked
+      if (isDelivered) {
+        pdf.text('X', tableX + 448, rowY - 5)
+      } else {
         pdf.text('X', tableX + 485, rowY - 5)
       }
     })
@@ -418,6 +438,8 @@ function generateTermPdf() {
     pdf.rect(tableX, y, 380, 86)
     pdf.rect(tableX + 380, y, 135, 86)
     pdf.text('Obs.: No caso de entrega de outros equipamentos, descreva:', tableX + 6, y + 18)
+    const observationLines = pdf.splitTextToSize(termObservation || '-', 355)
+    pdf.text(observationLines.slice(0, 3), tableX + 6, y + 38)
     pdf.text('Nº Patrimônio', tableX + 420, y + 18)
     pdf.line(tableX + 380, y + 28, tableX + 515, y + 28)
     pdf.line(tableX + 380, y + 48, tableX + 515, y + 48)
