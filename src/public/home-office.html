@@ -63,16 +63,18 @@
         <input id="signerRole" placeholder="Ex.: Auxiliar Administrativo">
 
         <label>Data de início do home office</label>
-        <input id="homeOfficeStartDate" type="date">
+        <input id="homeOfficeStartDate" type="date" readonly>
 
         <label>Cidade (assinatura)</label>
-        <input id="signatureCity" placeholder="Ex.: Joinville">
+        <select id="signatureCity">
+          <option value="">Selecione uma cidade</option>
+          <option value="Joinville">Joinville</option>
+          <option value="São Paulo">São Paulo</option>
+          <option value="Curitiba">Curitiba</option>
+        </select>
 
         <label>Nº Patrimônio</label>
         <input id="assetPatrimonio" placeholder="Ex.: NT013050" readonly>
-
-        <label>Headset (opcional)</label>
-        <input id="assetHeadset" placeholder="Ex.: SN-1234">
 
         <label>Monitor (opcional)</label>
         <input id="assetMonitor" placeholder="Ex.: SN-9988">
@@ -141,6 +143,16 @@ const authHeaders = (extra = {}) => ({
   ...extra,
   Authorization: `Bearer ${getJwtToken()}`
 })
+
+function getTodayIsoDate() {
+  const now = new Date()
+  const timezoneOffsetInMs = now.getTimezoneOffset() * 60 * 1000
+  return new Date(now.getTime() - timezoneOffsetInMs).toISOString().split('T')[0]
+}
+
+function applyTodayToHomeOfficeDate() {
+  byId('homeOfficeStartDate').value = getTodayIsoDate()
+}
 
 function logout(event) {
   if (event) event.preventDefault()
@@ -298,22 +310,22 @@ function generateTermPdf() {
   const signerName = byId('signerName').value.trim()
   const signerCpf = byId('signerCpf').value.trim()
   const signerRole = byId('signerRole').value.trim()
+  applyTodayToHomeOfficeDate()
   const homeOfficeStartDate = byId('homeOfficeStartDate').value
   const signatureCity = byId('signatureCity').value.trim()
-    const assetPatrimonio = byId('assetPatrimonio').value.trim()
-    const assetHeadset = byId('assetHeadset').value.trim()
-    const assetMonitor = byId('assetMonitor').value.trim()
-    const termObservation = byId('termObservation').value.trim()
-    const deliveryItems = [
-      { id: 'item-computador', label: 'a. Computador/ Notebook' },
-      { id: 'item-monitor', label: 'b. Monitor' },
-      { id: 'item-carregador', label: 'c. Carregador' },
-      { id: 'item-teclado', label: 'd. Teclado' },
-      { id: 'item-mouse', label: 'e. Mouse' },
-      { id: 'item-headset', label: 'f. Headset + base' },
-      { id: 'item-cabos', label: 'g. Cabos de Conexão de energia e rede' },
-      { id: 'item-regua', label: 'h. Régua de energia' }
-    ]
+  const assetPatrimonio = byId('assetPatrimonio').value.trim()
+  const assetMonitor = byId('assetMonitor').value.trim()
+  const termObservation = byId('termObservation').value.trim()
+  const deliveryItems = [
+    { id: 'item-computador', label: 'a. Computador/ Notebook' },
+    { id: 'item-monitor', label: 'b. Monitor' },
+    { id: 'item-carregador', label: 'c. Carregador' },
+    { id: 'item-teclado', label: 'd. Teclado' },
+    { id: 'item-mouse', label: 'e. Mouse' },
+    { id: 'item-headset', label: 'f. Headset + base' },
+    { id: 'item-cabos', label: 'g. Cabos de Conexão de energia e rede' },
+    { id: 'item-regua', label: 'h. Régua de energia' }
+  ]
 
   if (!signerName) {
     alert('Informe o nome do colaborador para assinatura')
@@ -445,8 +457,7 @@ function generateTermPdf() {
     pdf.line(tableX + 380, y + 48, tableX + 515, y + 48)
     pdf.line(tableX + 380, y + 67, tableX + 515, y + 67)
     pdf.text(assetPatrimonio || '-', tableX + 386, y + 42)
-    pdf.text(`HeadSet: ${assetHeadset || ''}`, tableX + 386, y + 62)
-    pdf.text(`Monitor: ${assetMonitor || ''}`, tableX + 386, y + 81)
+    pdf.text(`Monitor: ${assetMonitor || ''}`, tableX + 386, y + 62)
 
     y += 112
     const fechamento = 'Declaro ciência do meu dever em zelar pelos equipamentos recebidos e autorizo o desconto em folha de pagamento referentes a eventuais danos causados por mau uso, conforme descrito nos artigos 5º e 6º do Regimento Interno.'
@@ -560,6 +571,7 @@ async function startScanner() {
 }
 
 setupSignaturePad()
+applyTodayToHomeOfficeDate()
 </script>
 </body>
 </html>
