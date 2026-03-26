@@ -29,6 +29,7 @@ const htmlRoutes = {
   "/register": "register.html",
   "/change-password": "change-password.html",
   "/home-office": "home-office.html",
+  "/termo-responsabilidade": "termo-responsabilidade.html",
   "/retorno-home-office": "retorno-home-office.html"
 }
 

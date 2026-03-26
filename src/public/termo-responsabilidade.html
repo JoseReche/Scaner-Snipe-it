@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Termo de Responsabilidade</title>
+<link rel="stylesheet" href="/auth.css" />
+<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+<script src="https://unpkg.com/html5-qrcode"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+</head>
+<body>
+<div class="container">
+  <div class="topbar">
+    <h3>Termo de Responsabilidade</h3>
+    <div class="menu-wrapper">
+      <button id="menu-toggle" class="menu-toggle" type="button" aria-label="Abrir menu">☰</button>
+      <nav id="menu-panel" class="menu-panel" aria-label="Navegação principal">
+        <a href="/usuario">Usuário</a>
+        <a href="/scanner-pa">Scanner PA</a>
+        <a href="/scanner">Scanner Completo</a>
+        <a href="/home-office">Baixa Home</a>
+        <a href="/termo-responsabilidade">Termo Guarda</a>
+        <a href="/retorno-home-office">Retorno Home</a>
+        <a href="/dashboard">Dashboard</a>
+        <a href="#" onclick="logout(event)">Sair</a>
+      </nav>
+    </div>
+  </div>
+
+  <div class="grid scanner-grid">
+    <section class="card">
+      <h3>Leitura do ativo</h3>
+      <button id="startScanBtn" class="scan-button" onclick="startScanner()">📷 ESCANEAR QR CODE</button>
+      <div id="reader" style="display:none"></div>
+
+      <p class="small">Você também pode digitar manualmente o ID do ativo.</p>
+      <label>ID do ativo</label>
+      <input id="manualAsset" placeholder="Ex.: 2170">
+      <button onclick="loadAssetFromInput()">Buscar ativo</button>
+
+      <div style="margin-top:14px;" class="small" id="assetLookupResult">Nenhum ativo consultado.</div>
+    </section>
+
+    <section class="card">
+      <h3>Dados do termo</h3>
+      <div id="emptyState" class="small">Escaneie um ativo para preencher os dados do termo.</div>
+
+      <div id="assetPanel" style="display:none">
+        <div class="info-grid">
+          <div class="info-item"><b>Produto:</b> <span id="assetName">-</span></div>
+          <div class="info-item"><b>Marca / Modelo:</b> <span id="assetModel">-</span></div>
+          <div class="info-item"><b>Patrimônio:</b> <span id="assetTag">-</span></div>
+        </div>
+
+        <label>Nome</label>
+        <input id="employeeName" placeholder="Nome do empregado">
+
+        <label>Função</label>
+        <input id="employeeRole" placeholder="Função">
+
+        <label>Gestão</label>
+        <input id="employeeManagement" placeholder="Gestão">
+
+        <label>Data de admissão</label>
+        <input id="employeeAdmissionDate" type="date">
+
+        <label>Data de aquisição do equipamento (opcional)</label>
+        <input id="assetAcquisitionDate" type="date">
+
+        <label>Cidade de assinatura</label>
+        <input id="signatureCity" placeholder="Ex.: Joinville" value="Joinville">
+
+        <label>Data da assinatura</label>
+        <input id="signatureDate" type="date">
+
+        <label>Assinatura</label>
+        <canvas id="signatureCanvas" width="560" height="180" style="width:100%;border:1px solid #ccc;border-radius:6px;background:#fff;"></canvas>
+
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">
+          <button type="button" onclick="clearSignature()">Limpar assinatura</button>
+          <button id="generatePdfButton" type="button" onclick="generateTermPdf()">Gerar PDF e anexar</button>
+        </div>
+
+        <div id="pdfPreviewContainer" style="display:none;margin-top:14px;">
+          <label>Pré-visualização do PDF gerado</label>
+          <iframe id="pdfPreviewFrame" title="Pré-visualização do termo em PDF" style="width:100%;height:420px;border:1px solid #ccc;border-radius:6px;background:#fff;"></iframe>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<script src="/js/auth.js"></script>
+<script>
+requireAuthToken()
+
+let currentAssetId = null
+let currentAsset = null
+let scanner = null
+let scanning = false
+let lastScan = null
+let signaturePad = null
+let generatedTermPdfBlob = null
+let generatedTermPdfName = null
+let generatedTermPdfUrl = null
+
+const byId = (id) => document.getElementById(id)
+const menuToggle = byId('menu-toggle')
+const menuPanel = byId('menu-panel')
+
+menuToggle.addEventListener('click', () => menuPanel.classList.toggle('open'))
+
+document.addEventListener('click', (event) => {
+  if (!menuPanel.contains(event.target) && !menuToggle.contains(event.target)) {
+    menuPanel.classList.remove('open')
+  }
+})
+
+const authHeaders = (extra = {}) => ({ ...extra, Authorization: `Bearer ${getJwtToken()}` })
+
+function getTodayIsoDate() {
+  const now = new Date()
+  const timezoneOffsetInMs = now.getTimezoneOffset() * 60 * 1000
+  return new Date(now.getTime() - timezoneOffsetInMs).toISOString().split('T')[0]
+}
+
+function logout(event) {
+  if (event) event.preventDefault()
+  clearJwtToken()
+  window.location.href = '/login'
+}
+
+function isAuthTokenError(data) {
+  const message = (data?.error || '').toLowerCase()
+  return message.includes('token inválido') || message.includes('token ausente') || message.includes('token expirado')
+}
+
+function parseAssetId(raw) {
+  if (!raw) return null
+  if (raw.includes('hardware/')) return raw.split('hardware/')[1].trim()
+  return raw.trim()
+}
+
+function fillPanel(asset) {
+  byId('emptyState').style.display = 'none'
+  byId('assetPanel').style.display = 'block'
+  byId('assetName').textContent = asset.name || 'NOTEBOOK'
+  byId('assetModel').textContent = asset.model || '-'
+  byId('assetTag').textContent = asset.assetTag || asset.id || '-'
+  byId('assetLookupResult').innerHTML = `<b>ID:</b> ${asset.id || '-'}<br><b>Status:</b> ${asset.status || '-'}<br><b>Atribuído:</b> ${asset.assignedTo || '-'}`
+}
+
+async function loadAsset(assetId) {
+  const res = await fetch('/asset/' + assetId, { headers: authHeaders() })
+  const data = await res.json()
+
+  if (res.status === 401 && isAuthTokenError(data)) {
+    logout()
+    return
+  }
+
+  if (!res.ok) {
+    alert(data.error || 'Falha ao buscar ativo')
+    return
+  }
+
+  currentAssetId = data.id
+  currentAsset = data
+  byId('manualAsset').value = data.id
+  fillPanel(data)
+}
+
+function loadAssetFromInput() {
+  const id = parseAssetId(byId('manualAsset').value)
+  if (!id) return
+  loadAsset(id)
+}
+
+function onScanSuccess(decodedText) {
+  const id = parseAssetId(decodedText)
+  if (id === lastScan) return
+  lastScan = id
+  if (navigator.vibrate) navigator.vibrate(120)
+  loadAsset(id)
+}
+
+async function startScanner() {
+  const reader = byId('reader')
+  if (!scanner) {
+    scanner = new Html5Qrcode('reader')
+  }
+
+  if (scanning) {
+    await scanner.stop()
+    scanning = false
+    reader.style.display = 'none'
+    byId('startScanBtn').textContent = '📷 ESCANEAR QR CODE'
+    return
+  }
+
+  reader.style.display = 'block'
+  await scanner.start(
+    { facingMode: 'environment' },
+    { fps: 10, qrbox: { width: 260, height: 260 } },
+    onScanSuccess
+  )
+  scanning = true
+  byId('startScanBtn').textContent = '⏹️ PARAR LEITURA'
+}
+
+function setupSignaturePad() {
+  const canvas = byId('signatureCanvas')
+  const context = canvas.getContext('2d')
+  let drawing = false
+
+  const positionFromEvent = (event) => {
+    const rect = canvas.getBoundingClientRect()
+    const touch = event.touches?.[0]
+    const clientX = touch ? touch.clientX : event.clientX
+    const clientY = touch ? touch.clientY : event.clientY
+    return { x: clientX - rect.left, y: clientY - rect.top }
+  }
+
+  const start = (event) => {
+    drawing = true
+    const position = positionFromEvent(event)
+    context.beginPath()
+    context.moveTo(position.x, position.y)
+    event.preventDefault()
+  }
+
+  const move = (event) => {
+    if (!drawing) return
+    const position = positionFromEvent(event)
+    context.lineTo(position.x, position.y)
+    context.strokeStyle = '#1f2937'
+    context.lineWidth = 2
+    context.lineCap = 'round'
+    context.lineJoin = 'round'
+    context.stroke()
+    event.preventDefault()
+  }
+
+  const end = () => {
+    drawing = false
+    context.closePath()
+  }
+
+  canvas.addEventListener('mousedown', start)
+  canvas.addEventListener('mousemove', move)
+  canvas.addEventListener('mouseup', end)
+  canvas.addEventListener('mouseleave', end)
+
+  canvas.addEventListener('touchstart', start, { passive: false })
+  canvas.addEventListener('touchmove', move, { passive: false })
+  canvas.addEventListener('touchend', end)
+
+  signaturePad = {
+    clear: () => context.clearRect(0, 0, canvas.width, canvas.height),
+    isEmpty: () => {
+      const data = context.getImageData(0, 0, canvas.width, canvas.height).data
+      return !data.some((value) => value !== 0)
+    },
+    canvas
+  }
+}
+
+function clearSignature() {
+  signaturePad?.clear()
+}
+
+function formatDatePtBr(isoDate) {
+  if (!isoDate) return ''
+  const [year, month, day] = isoDate.split('-')
+  return `${day}/${month}/${year}`
+}
+
+async function generateTermPdf() {
+  if (!currentAssetId || !currentAsset) {
+    alert('Primeiro selecione um ativo')
+    return
+  }
+
+  const employeeName = byId('employeeName').value.trim()
+  const employeeRole = byId('employeeRole').value.trim()
+  const employeeManagement = byId('employeeManagement').value.trim()
+  const employeeAdmissionDate = byId('employeeAdmissionDate').value
+  const assetAcquisitionDate = byId('assetAcquisitionDate').value
+  const signatureCity = byId('signatureCity').value.trim()
+  const signatureDate = byId('signatureDate').value
+
+  if (!employeeName || !employeeRole || !employeeManagement || !employeeAdmissionDate || !signatureCity || !signatureDate) {
+    alert('Preencha todos os campos obrigatórios do termo')
+    return
+  }
+
+  if (signaturePad?.isEmpty()) {
+    alert('Faça a assinatura antes de gerar o PDF')
+    return
+  }
+
+  const generateButton = byId('generatePdfButton')
+  generateButton.disabled = true
+  generateButton.textContent = 'Gerando e anexando PDF...'
+
+  try {
+    const { jsPDF } = window.jspdf
+    const pdf = new jsPDF({ unit: 'pt', format: 'a4' })
+    const pageWidth = pdf.internal.pageSize.getWidth()
+    const marginX = 36
+    let y = 55
+
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(20)
+    pdf.setTextColor(128, 128, 128)
+    pdf.text('SCHULZE', pageWidth / 2, y, { align: 'center' })
+    pdf.setFontSize(9)
+    pdf.text('ADVOGADOS ASSOCIADOS', pageWidth / 2, y + 12, { align: 'center' })
+    y += 48
+
+    pdf.setTextColor(0, 0, 0)
+    pdf.setFont('times', 'bold')
+    pdf.setFontSize(14)
+    pdf.text('TERMO DE RESPONSABILIDADE PELA GUARDA E USO DE EQUIPAMENTO DE TRABALHO', marginX, y)
+    y += 54
+
+    pdf.setFontSize(13)
+    pdf.text('IDENTIFICAÇÃO DO EMPREGADO', marginX, y)
+    y += 24
+
+    pdf.setFont('times', 'normal')
+    pdf.setFontSize(12)
+    pdf.text(`Nome: ${employeeName}`, marginX, y); y += 18
+    pdf.text(`Função: ${employeeRole}`, marginX, y); y += 18
+    pdf.text(`Gestão: ${employeeManagement}`, marginX, y); y += 18
+    pdf.text(`Data Admissão: ${formatDatePtBr(employeeAdmissionDate)}`, marginX, y)
+    y += 36
+
+    const paragraph = `Recebi da empresa Schulze Advogados Associados, CNPJ Nº 81.144.396/0004-95, a título de empréstimo, para uso exclusivo, conforme determinado em lei, o equipamento especificado neste termo de responsabilidade. Comprometendo-me a mantê-lo em perfeito estado de conservação, ficando ciente de que:`
+    pdf.text(pdf.splitTextToSize(paragraph, 520), marginX, y)
+    y += 58
+
+    const clauses = [
+      '1 - Se o equipamento for danificado ou inutilizado por emprego inadequado, mau uso, negligência ou extravio, a empresa me fornecerá novo equipamento e cobrará o valor de um equipamento da mesma marca ou equivalente ao da praça.',
+      '2 - Em caso de dano, inutilização, ou extravio do equipamento deverei comunicar imediatamente ao setor competente.',
+      '3 - Terminando os serviços ou no caso de rescisão do contrato de trabalho, devolverei o equipamento completo e em perfeito estado de conservação, considerando-se o tempo do uso do mesmo (tempo de vida útil), ao setor competente.',
+      '4 - Estando os equipamentos em minha posse, estarei sujeito a inspeções sem prévio aviso.'
+    ]
+
+    clauses.forEach((line) => {
+      const lines = pdf.splitTextToSize(line, 520)
+      pdf.text(lines, marginX, y)
+      y += (lines.length * 15) + 4
+    })
+
+    y += 14
+    const tableX = marginX + 12
+    const tableY = y
+    const widths = [96, 150, 160, 110]
+    const rowHeight = 36
+
+    pdf.setFillColor(242, 232, 0)
+    pdf.rect(tableX, tableY, widths.reduce((a, b) => a + b, 0), rowHeight, 'FD')
+    pdf.rect(tableX, tableY + rowHeight, widths.reduce((a, b) => a + b, 0), rowHeight, 'S')
+
+    let colX = tableX
+    widths.forEach((width) => {
+      pdf.line(colX, tableY, colX, tableY + (rowHeight * 2))
+      colX += width
+    })
+    pdf.line(colX, tableY, colX, tableY + (rowHeight * 2))
+
+    pdf.setFont('times', 'bolditalic')
+    pdf.text('Descrição do Produto', tableX + 8, tableY + 14)
+    pdf.text('Marca / Modelo', tableX + widths[0] + 8, tableY + 14)
+    pdf.text('Patrimônio', tableX + widths[0] + widths[1] + 8, tableY + 14)
+    pdf.text('Data Aquisição', tableX + widths[0] + widths[1] + widths[2] + 8, tableY + 14)
+
+    pdf.setFont('times', 'normal')
+    pdf.text((currentAsset.name || 'NOTEBOOK').toUpperCase(), tableX + 8, tableY + rowHeight + 22)
+    pdf.text((currentAsset.model || '-').slice(0, 26), tableX + widths[0] + 8, tableY + rowHeight + 22)
+    pdf.text((currentAsset.assetTag || String(currentAsset.id || '-')).slice(0, 24), tableX + widths[0] + widths[1] + 8, tableY + rowHeight + 22)
+    pdf.text(formatDatePtBr(assetAcquisitionDate) || '-', tableX + widths[0] + widths[1] + widths[2] + 8, tableY + rowHeight + 22)
+
+    y = tableY + 150
+    pdf.text('Assinatura: _________________________________________________', marginX, y)
+    pdf.addImage(signaturePad.canvas.toDataURL('image/png'), 'PNG', marginX + 88, y - 38, 180, 48)
+    y += 74
+
+    pdf.text(`${signatureCity}, ${formatDatePtBr(signatureDate)}`, pageWidth - 180, y)
+
+    const pdfBlob = pdf.output('blob')
+    if (pdfBlob.size > 2 * 1024 * 1024) {
+      alert('O PDF gerado ultrapassa 2MB. Reduza os dados do termo.')
+      return
+    }
+
+    generatedTermPdfBlob = pdfBlob
+    const safeName = employeeName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '')
+    generatedTermPdfName = `termo-responsabilidade-${safeName || 'colaborador'}-${currentAssetId}.pdf`
+
+    if (generatedTermPdfUrl) URL.revokeObjectURL(generatedTermPdfUrl)
+    generatedTermPdfUrl = URL.createObjectURL(pdfBlob)
+    byId('pdfPreviewFrame').src = generatedTermPdfUrl
+    byId('pdfPreviewContainer').style.display = 'block'
+
+    const uploaded = await uploadGeneratedTermPdf()
+    if (uploaded) {
+      alert('PDF gerado e anexado com sucesso.')
+    }
+  } catch (error) {
+    alert(`Erro ao gerar PDF: ${error.message}`)
+  } finally {
+    generateButton.disabled = false
+    generateButton.textContent = 'Gerar PDF e anexar'
+  }
+}
+
+async function uploadGeneratedTermPdf() {
+  if (!currentAssetId || !generatedTermPdfBlob || !generatedTermPdfName) return false
+
+  const formData = new FormData()
+  formData.append('file', generatedTermPdfBlob, generatedTermPdfName)
+
+  const response = await fetch(`/asset/${currentAssetId}/upload`, {
+    method: 'POST',
+    headers: authHeaders(),
+    body: formData
+  })
+
+  const data = await response.json()
+
+  if (response.status === 401 && isAuthTokenError(data)) {
+    logout()
+    return false
+  }
+
+  if (!response.ok) {
+    alert(data.error || 'Falha ao anexar PDF no ativo')
+    return false
+  }
+
+  return true
+}
+
+setupSignaturePad()
+byId('signatureDate').value = getTodayIsoDate()
+</script>
+</body>
+</html>
