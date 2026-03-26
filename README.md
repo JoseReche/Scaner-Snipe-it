@@ -102,6 +102,14 @@ docker run --rm -p 8080:8080 scaner-snipe-vite
 
 > Importante: este container serve apenas o frontend estático. As chamadas `/api/*` precisam apontar para o backend Express em execução.
 
+Se o frontend estiver hospedado sem proxy para `/api/*`, defina a URL base da API no navegador:
+
+```js
+localStorage.setItem('scaner.apiBaseUrl', 'https://seu-backend-express')
+```
+
+Opcionalmente, também é possível expor `window.SCANER_API_BASE_URL` antes de carregar `js/auth.js`.
+
 ## Testes automatizados
 
 Os testes são executados com o runner nativo do Node (`node --test`) via `npm test` dentro de `src/`.
