@@ -1,9 +1,52 @@
 const TOKEN_KEY = 'scaner.jwt'
 const THEME_KEY = 'scaner.theme'
+const API_BASE_KEY = 'scaner.apiBaseUrl'
 
 const getJwtToken = () => localStorage.getItem(TOKEN_KEY)
 const setJwtToken = (token) => localStorage.setItem(TOKEN_KEY, token)
 const clearJwtToken = () => localStorage.removeItem(TOKEN_KEY)
+
+const normalizeBaseUrl = (value) => String(value || '').trim().replace(/\/+$/, '')
+const getConfiguredApiBase = () => {
+  const fromWindow = typeof window !== 'undefined' ? window.SCANER_API_BASE_URL : ''
+  const fromStorage = localStorage.getItem(API_BASE_KEY)
+  const fromMeta = document.querySelector('meta[name="scaner-api-base"]')?.getAttribute('content')
+
+  return normalizeBaseUrl(fromWindow || fromStorage || fromMeta || '')
+}
+
+const resolveApiUrl = (path) => {
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`
+  const configuredBase = getConfiguredApiBase()
+
+  if (!configuredBase) {
+    return normalizedPath
+  }
+
+  return `${configuredBase}${normalizedPath}`
+}
+
+const readJsonResponse = async (response) => {
+  const contentType = response.headers.get('content-type') || ''
+
+  if (!contentType.includes('application/json')) {
+    return null
+  }
+
+  try {
+    return await response.json()
+  } catch (error) {
+    return null
+  }
+}
+
+const getRequestErrorMessage = (response, fallback) => {
+  if (response.status === 405) {
+    return 'API indisponível neste endereço. Configure o backend em SCANER_API_BASE_URL.'
+  }
+
+  return fallback
+}
 
 const applyTheme = (theme) => {
   const normalized = theme === 'dark' ? 'dark' : 'light'
@@ -69,16 +112,16 @@ const setupLoginForm = (formId, messageId) => {
 
     const body = Object.fromEntries(new FormData(form).entries())
 
-    const response = await fetch('/api/auth/login', {
+    const response = await fetch(resolveApiUrl('/api/auth/login'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
     })
 
-    const data = await response.json()
+    const data = await readJsonResponse(response)
 
     if (!response.ok) {
-      setFeedback(message, data.error || 'Falha no login', 'error')
+      setFeedback(message, data?.error || getRequestErrorMessage(response, 'Falha no login'), 'error')
       return
     }
 
@@ -97,7 +140,7 @@ const setupChangePasswordForm = (formId, messageId) => {
     event.preventDefault()
 
     const body = Object.fromEntries(new FormData(form).entries())
-    const response = await fetch('/api/auth/change-password', {
+    const response = await fetch(resolveApiUrl('/api/auth/change-password'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -106,10 +149,10 @@ const setupChangePasswordForm = (formId, messageId) => {
       body: JSON.stringify(body)
     })
 
-    const data = await response.json()
+    const data = await readJsonResponse(response)
 
     if (!response.ok) {
-      setFeedback(message, data.error || 'Falha na alteração de senha', 'error')
+      setFeedback(message, data?.error || getRequestErrorMessage(response, 'Falha na alteração de senha'), 'error')
       return
     }
 
@@ -127,16 +170,16 @@ const setupRegisterForm = (formId, messageId) => {
     event.preventDefault()
 
     const body = Object.fromEntries(new FormData(form).entries())
-    const response = await fetch('/api/auth/register', {
+    const response = await fetch(resolveApiUrl('/api/auth/register'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
     })
 
-    const data = await response.json()
+    const data = await readJsonResponse(response)
 
     if (!response.ok) {
-      setFeedback(message, data.error || 'Falha no cadastro', 'error')
+      setFeedback(message, data?.error || getRequestErrorMessage(response, 'Falha no cadastro'), 'error')
       return
     }
 
