@@ -74,6 +74,21 @@ npm test
 npm start
 ```
 
+## Executar em contêiner Node.js
+
+Na raiz do projeto, gere a imagem e execute o container:
+
+```bash
+docker build -t scaner-snipe-it .
+docker run --rm -p 3000:3000 --env-file .env --name scaner-snipe-it scaner-snipe-it
+```
+
+Se quiser manter os dados SQLite fora do contêiner, monte um volume para `src/data`:
+
+```bash
+docker run --rm -p 3000:3000 --env-file .env -v $(pwd)/src/data:/app/data --name scaner-snipe-it scaner-snipe-it
+```
+
 ## Testes automatizados
 
 Os testes são executados com o runner nativo do Node (`node --test`) via `npm test` dentro de `src/`.
