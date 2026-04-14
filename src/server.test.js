@@ -552,6 +552,32 @@ test('POST /api/auth/register cria usuário e impede matrícula duplicada', asyn
   }
 })
 
+test('POST /api/auth/register aceita matrícula com ponto e arroba para empresas diferentes', async () => {
+  const server = app.listen(0)
+  const { port } = server.address()
+
+  try {
+    const payload = {
+      matricula: `u.${Date.now()}@emp`,
+      password: 'SenhaSuperForte!2026',
+      apiKey: 'api-key-do-usuario-123456'
+    }
+
+    const response = await fetch(`http://127.0.0.1:${port}/api/auth/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+
+    const data = await response.json()
+
+    assert.equal(response.status, 201)
+    assert.equal(data.success, true)
+  } finally {
+    server.close()
+  }
+})
+
 
 
 test('POST /api/auth/register bloqueia cadastro quando o usuário já está autenticado', async () => {

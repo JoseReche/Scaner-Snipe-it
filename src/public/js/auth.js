@@ -54,6 +54,18 @@ const setFeedback = (element, text, type) => {
   }
 }
 
+const formatApiError = (data, fallbackMessage) => {
+  if (data?.error && Array.isArray(data.details) && data.details.length > 0) {
+    const details = data.details
+      .map((detail) => `${detail.field}: ${detail.message}`)
+      .join(' | ')
+
+    return `${data.error} (${details})`
+  }
+
+  return data?.error || fallbackMessage
+}
+
 const requireAuthToken = () => {
   if (!getJwtToken()) {
     window.location.href = '/login'
@@ -78,7 +90,7 @@ const setupLoginForm = (formId, messageId) => {
     const data = await response.json()
 
     if (!response.ok) {
-      setFeedback(message, data.error || 'Falha no login', 'error')
+      setFeedback(message, formatApiError(data, 'Falha no login'), 'error')
       return
     }
 
@@ -109,7 +121,7 @@ const setupChangePasswordForm = (formId, messageId) => {
     const data = await response.json()
 
     if (!response.ok) {
-      setFeedback(message, data.error || 'Falha na alteração de senha', 'error')
+      setFeedback(message, formatApiError(data, 'Falha na alteração de senha'), 'error')
       return
     }
 
@@ -136,7 +148,7 @@ const setupRegisterForm = (formId, messageId) => {
     const data = await response.json()
 
     if (!response.ok) {
-      setFeedback(message, data.error || 'Falha no cadastro', 'error')
+      setFeedback(message, formatApiError(data, 'Falha no cadastro'), 'error')
       return
     }
 
