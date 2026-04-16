@@ -1,0 +1,16 @@
+:root { font-family: Inter, system-ui, sans-serif; }
+body { margin: 0; background: #f3f4f6; color: #111827; }
+.app-shell { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
+.sidebar { background: #111827; color: #fff; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.sidebar a { color: #bfdbfe; text-decoration: none; padding: 6px 0; }
+.sidebar button { margin-top: auto; }
+main { padding: 24px; }
+.page { background: #fff; border-radius: 12px; padding: 16px; box-shadow: 0 4px 14px rgba(0,0,0,.08); }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; }
+.card { background: #eff6ff; border-radius: 10px; padding: 12px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 8px; margin-bottom: 12px; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+input, textarea, select, button { padding: 10px; border-radius: 8px; border: 1px solid #d1d5db; }
+button { background: #2563eb; color: #fff; border: none; cursor: pointer; }
+.error { color: #dc2626; }
+@media (max-width: 900px) { .app-shell { grid-template-columns: 1fr; } }
