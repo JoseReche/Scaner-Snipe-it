@@ -70,10 +70,10 @@ const baseAsset = {
   name: 'Notebook',
   status_label: { id: 2, name: 'Ativo' },
   location: { id: 3, name: 'Matriz' },
-  rtd_location: { id: 4, name: 'PA-OLD' },
+  rtd_location: { id: 4, name: 'Sala TI - C3' },
   custom_fields: {
-    PA: { field: '_snipeit_pa_1', value: 'PA-OLD' },
-    'MAC Address': { field: '_snipeit_mac_address_2', value: 'AA:BB' }
+    'Centro de Custo': { field: '_snipeit_centro_de_custo_5', value: 'SAESHIA do Sucesso - Pós-Graduação' },
+    Teletrabalho: { field: '_snipeit_teletrabalho_8', value: 'Não' }
   }
 }
 
@@ -88,9 +88,9 @@ test('parseIntegerField converte inteiros e ignora inválidos', () => {
 
 test('mapCustomFieldLabelToKey cria mapeamento por label e key interno', () => {
   const mapping = mapCustomFieldLabelToKey(baseAsset)
-  assert.equal(mapping.PA, '_snipeit_pa_1')
-  assert.equal(mapping.pa, '_snipeit_pa_1')
-  assert.equal(mapping['_snipeit_pa_1'], '_snipeit_pa_1')
+  assert.equal(mapping['Centro de Custo'], '_snipeit_centro_de_custo_5')
+  assert.equal(mapping['centro de custo'], '_snipeit_centro_de_custo_5')
+  assert.equal(mapping['_snipeit_centro_de_custo_5'], '_snipeit_centro_de_custo_5')
 })
 
 test('buildAssetPayload ignora name/serial e monta payload flat com custom fields', async () => {
@@ -101,14 +101,14 @@ test('buildAssetPayload ignora name/serial e monta payload flat com custom field
   const payload = await buildAssetPayload(10, {
     serial: 'S2',
     status_id: '5',
-    custom_fields: { 'MAC Address': 'CC:DD', PA: 'PA-NEW' }
+    custom_fields: { 'Centro de Custo': 'Financeiro', Teletrabalho: 'Sim' }
   })
 
   assert.equal(payload.name, undefined)
   assert.equal(payload.serial, undefined)
   assert.equal(payload.status_id, 5)
-  assert.equal(payload._snipeit_pa_1, 'PA-NEW')
-  assert.equal(payload._snipeit_mac_address_2, 'CC:DD')
+  assert.equal(payload._snipeit_centro_de_custo_5, 'Financeiro')
+  assert.equal(payload._snipeit_teletrabalho_8, 'Sim')
   assert.equal(payload.custom_fields, undefined)
 
   axios.get = originalGet
@@ -121,16 +121,16 @@ test('buildAssetPayload usa db_column quando o custom field não expõe a propri
     data: {
       ...baseAsset,
       custom_fields: {
-        PA: { db_column: '_snipeit_pa_6', value: 'PA-OLD' }
+        Teletrabalho: { db_column: '_snipeit_teletrabalho_8', value: 'Não' }
       }
     }
   })
 
   const payload = await buildAssetPayload(10, {
-    custom_fields: { PA: 'PA-NEW' }
+    custom_fields: { Teletrabalho: 'Sim' }
   })
 
-  assert.equal(payload._snipeit_pa_6, 'PA-NEW')
+  assert.equal(payload._snipeit_teletrabalho_8, 'Sim')
 
   axios.get = originalGet
 })
@@ -178,14 +178,14 @@ test('PATCH /asset/:id aplica atualização e devolve ativo mapeado', async () =
     const response = await fetch(`http://127.0.0.1:${port}/asset/10`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', ...authHeader() },
-      body: JSON.stringify({ status_id: '7', custom_fields: { PA: 'PA-API' } })
+      body: JSON.stringify({ status_id: '7', custom_fields: { Teletrabalho: 'Sim' } })
     })
     const data = await response.json()
 
     assert.equal(response.status, 200)
     assert.equal(data.success, true)
     assert.equal(requests.length, 1)
-    assert.equal(requests[0].payload._snipeit_pa_1, 'PA-API')
+    assert.equal(requests[0].payload._snipeit_teletrabalho_8, 'Sim')
     assert.equal(requests[0].payload.status_id, 7)
     assert.equal(requests[0].payload.custom_fields, undefined)
   } finally {
@@ -215,7 +215,7 @@ test('GET /move-info retorna o payload bruto do Snipe-IT', async () => {
 
     assert.equal(response.status, 200)
     assert.equal(data.id, 10)
-    assert.equal(data.custom_fields.PA.value, 'PA-OLD')
+    assert.equal(data.custom_fields.Teletrabalho.value, 'Não')
   } finally {
     server.close()
     axios.get = originalGet
