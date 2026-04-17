@@ -15,7 +15,7 @@
       <button id="menu-toggle" class="menu-toggle" type="button" aria-label="Abrir menu">☰</button>
       <nav id="menu-panel" class="menu-panel" aria-label="Navegação principal">
         <a href="/scanner">Scanner</a>
-        <a href="/scanner-pa">Scanner PA</a>
+        <a href="/cadastro-ativo">Cadastro de Ativo</a>
         <a href="/home-office">Baixa Home Office</a>
         <a href="/usuario">Usuário</a>
         <a href="/dashboard">Dashboard</a>
@@ -43,7 +43,6 @@
       <div id="assetPanel" style="display:none">
         <div class="info-grid">
           <div class="info-item"><b>Nome:</b> <span id="view-name">-</span></div>
-          <div class="info-item"><b>PA:</b> <span id="view-pa">-</span></div>
           <div class="info-item"><b>Status:</b> <span id="view-status">-</span></div>
           <div class="info-item"><b>Atribuído:</b> <span id="view-assigned">-</span></div>
         </div>
@@ -153,7 +152,6 @@ function fillPanel(asset) {
   byId('assetPanel').style.display = 'block'
 
   byId('view-name').textContent = asset.name || '-'
-  byId('view-pa').textContent = asset.pa || '-'
   byId('view-status').textContent = asset.status || '-'
   byId('view-assigned').textContent = asset.assignedTo || '-'
 

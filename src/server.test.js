@@ -21,9 +21,9 @@ const { generateAccessToken } = require('./auth/jwt')
 const {
   app,
   buildAssetPayload,
+  buildCreateAssetPayload,
   parseIntegerField,
-  mapCustomFieldLabelToKey,
-  findPaCustomFieldKey
+  mapCustomFieldLabelToKey
 } = require('./server')
 
 
@@ -93,10 +93,6 @@ test('mapCustomFieldLabelToKey cria mapeamento por label e key interno', () => {
   assert.equal(mapping['_snipeit_pa_1'], '_snipeit_pa_1')
 })
 
-test('findPaCustomFieldKey identifica o field key real do PA', () => {
-  assert.equal(findPaCustomFieldKey(baseAsset), '_snipeit_pa_1')
-})
-
 test('buildAssetPayload ignora name/serial e monta payload flat com custom fields', async () => {
   const originalGet = axios.get
 
@@ -104,9 +100,8 @@ test('buildAssetPayload ignora name/serial e monta payload flat com custom field
 
   const payload = await buildAssetPayload(10, {
     serial: 'S2',
-    pa: 'PA-NEW',
     status_id: '5',
-    custom_fields: { 'MAC Address': 'CC:DD' }
+    custom_fields: { 'MAC Address': 'CC:DD', PA: 'PA-NEW' }
   })
 
   assert.equal(payload.name, undefined)
@@ -132,7 +127,7 @@ test('buildAssetPayload usa db_column quando o custom field não expõe a propri
   })
 
   const payload = await buildAssetPayload(10, {
-    pa: 'PA-NEW'
+    custom_fields: { PA: 'PA-NEW' }
   })
 
   assert.equal(payload._snipeit_pa_6, 'PA-NEW')
@@ -183,7 +178,7 @@ test('PATCH /asset/:id aplica atualização e devolve ativo mapeado', async () =
     const response = await fetch(`http://127.0.0.1:${port}/asset/10`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', ...authHeader() },
-      body: JSON.stringify({ pa: 'PA-API', status_id: '7' })
+      body: JSON.stringify({ status_id: '7', custom_fields: { PA: 'PA-API' } })
     })
     const data = await response.json()
 
@@ -227,34 +222,40 @@ test('GET /move-info retorna o payload bruto do Snipe-IT', async () => {
   }
 })
 
-test('POST /move atualiza o campo customizado _snipeit_pa_6', async () => {
-  const originalPatch = axios.patch
+test('buildCreateAssetPayload exige model_id e status_id', () => {
+  assert.throws(() => buildCreateAssetPayload({ name: 'Ativo sem campos obrigatórios' }), /model_id e status_id/)
+})
+
+test('POST /asset cadastra novo ativo no Snipe-IT', async () => {
+  const originalPost = axios.post
   const requests = []
 
-  axios.patch = async (url, payload) => {
+  axios.post = async (url, payload) => {
     requests.push({ url, payload })
-    return { data: { status: 'success' } }
+    return { data: { status: 'success', messages: 'Asset created' } }
   }
 
   const server = app.listen(0)
   const { port } = server.address()
 
   try {
-    const response = await fetch(`http://127.0.0.1:${port}/move`, {
+    const response = await fetch(`http://127.0.0.1:${port}/asset`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeader() },
-      body: JSON.stringify({ asset: 10, pa: 'PA-NOVO' })
+      body: JSON.stringify({ name: 'Notebook', model_id: 10, status_id: 2, company_id: 7 })
     })
     const data = await response.json()
 
-    assert.equal(response.status, 200)
+    assert.equal(response.status, 201)
     assert.equal(data.success, true)
     assert.equal(requests.length, 1)
-    assert.equal(requests[0].payload._snipeit_pa_6, 'PA-NOVO')
-    assert.equal(requests[0].payload.rtd_location_id, undefined)
+    assert.match(requests[0].url, /\/hardware$/)
+    assert.equal(requests[0].payload.model_id, 10)
+    assert.equal(requests[0].payload.status_id, 2)
+    assert.equal(requests[0].payload.company_id, 7)
   } finally {
     server.close()
-    axios.patch = originalPatch
+    axios.post = originalPost
   }
 })
 
@@ -527,7 +528,7 @@ test('POST /api/auth/register e POST /api/auth/login não consultam API do Snipe
 })
 
 
-test('GET /options retorna status, locais, empresas e usuários', async () => {
+test('GET /options retorna status, locais, empresas, usuários e modelos', async () => {
   const originalGet = axios.get
 
   axios.get = async (url) => {
@@ -547,6 +548,10 @@ test('GET /options retorna status, locais, empresas e usuários', async () => {
       return { data: { rows: [{ id: 4, name: 'Usuário A' }] } }
     }
 
+    if (url.endsWith('/models')) {
+      return { data: { rows: [{ id: 5, name: 'Latitude 5420' }] } }
+    }
+
     throw new Error(`URL inesperada no GET: ${url}`)
   }
 
@@ -562,6 +567,7 @@ test('GET /options retorna status, locais, empresas e usuários', async () => {
     assert.deepEqual(data.locations, [{ id: 2, name: 'Matriz' }])
     assert.deepEqual(data.companies, [{ id: 3, name: 'Empresa A' }])
     assert.deepEqual(data.users, [{ id: 4, name: 'Usuário A' }])
+    assert.deepEqual(data.models, [{ id: 5, name: 'Latitude 5420' }])
   } finally {
     server.close()
     axios.get = originalGet
