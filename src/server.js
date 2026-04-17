@@ -146,6 +146,37 @@ const parseIntegerField = (value) => {
   return parsed
 }
 
+const parseBooleanField = (value) => {
+  if (value === true || value === false) {
+    return value
+  }
+
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase()
+
+    if (["true", "1", "sim", "yes"].includes(normalized)) {
+      return true
+    }
+
+    if (["false", "0", "nao", "não", "no"].includes(normalized)) {
+      return false
+    }
+  }
+
+  return undefined
+}
+
+const parseCustomFieldOptions = (rawValues) => {
+  if (!rawValues || typeof rawValues !== "string") {
+    return []
+  }
+
+  return rawValues
+    .split(/\r?\n|,/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
 const mapCustomFieldLabelToKey = (asset) => {
   const mapping = {}
 
@@ -319,8 +350,29 @@ const buildAssetPayload = async (assetId, body, requestHeaders) => {
 
 const buildCreateAssetPayload = (body) => {
   const payload = {}
-  const allowedTextFields = ["name", "serial", "asset_tag", "notes"]
-  const allowedIntegerFields = ["model_id", "status_id", "location_id", "rtd_location_id", "company_id"]
+  const allowedTextFields = [
+    "name",
+    "serial",
+    "asset_tag",
+    "notes",
+    "order_number",
+    "purchase_cost",
+    "purchase_date",
+    "expected_checkin"
+  ]
+  const allowedIntegerFields = [
+    "model_id",
+    "status_id",
+    "location_id",
+    "rtd_location_id",
+    "company_id",
+    "supplier_id",
+    "warranty_months",
+    "assigned_to",
+    "category_id",
+    "manufacturer_id"
+  ]
+  const allowedBooleanFields = ["requestable", "byod"]
 
   for (const field of allowedTextFields) {
     if (body[field] !== undefined && body[field] !== null && String(body[field]).trim() !== "") {
@@ -333,6 +385,24 @@ const buildCreateAssetPayload = (body) => {
 
     if (parsed !== undefined) {
       payload[field] = parsed
+    }
+  }
+
+  for (const field of allowedBooleanFields) {
+    const parsed = parseBooleanField(body[field])
+
+    if (parsed !== undefined) {
+      payload[field] = parsed
+    }
+  }
+
+  if (body.custom_fields && typeof body.custom_fields === "object") {
+    for (const [fieldKey, value] of Object.entries(body.custom_fields)) {
+      if (!fieldKey || value === undefined || value === null || String(value).trim() === "") {
+        continue
+      }
+
+      payload[fieldKey] = value
     }
   }
 
@@ -398,12 +468,16 @@ app.get("/move-info", async (req, res) => {
 app.get("/options", async (req, res) => {
   try {
     const requestHeaders = await getUserHeaders(req)
-    const [statusRows, locationRows, companyRows, userRows, modelRows] = await Promise.all([
+    const [statusRows, locationRows, companyRows, userRows, modelRows, supplierRows, categoryRows, manufacturerRows, fieldRows] = await Promise.all([
       fetchPaginatedRows("statuslabels", requestHeaders),
       fetchPaginatedRows("locations", requestHeaders),
       fetchPaginatedRows("companies", requestHeaders),
       fetchPaginatedRows("users", requestHeaders),
-      fetchPaginatedRows("models", requestHeaders)
+      fetchPaginatedRows("models", requestHeaders),
+      fetchPaginatedRows("suppliers", requestHeaders),
+      fetchPaginatedRows("categories", requestHeaders),
+      fetchPaginatedRows("manufacturers", requestHeaders),
+      fetchPaginatedRows("fields", requestHeaders)
     ])
 
     const statuses = statusRows.map((item) => ({ id: item.id, name: item.name })).filter((item) => item.id && item.name)
@@ -413,8 +487,19 @@ app.get("/options", async (req, res) => {
       .map((item) => ({ id: item.id, name: item.name || item.username || item.email }))
       .filter((item) => item.id && item.name)
     const models = modelRows.map((item) => ({ id: item.id, name: item.name })).filter((item) => item.id && item.name)
+    const suppliers = supplierRows.map((item) => ({ id: item.id, name: item.name })).filter((item) => item.id && item.name)
+    const categories = categoryRows.map((item) => ({ id: item.id, name: item.name })).filter((item) => item.id && item.name)
+    const manufacturers = manufacturerRows.map((item) => ({ id: item.id, name: item.name })).filter((item) => item.id && item.name)
+    const customFields = fieldRows
+      .map((item) => ({
+        label: item.name,
+        key: item.db_column || item.field || item.name,
+        element: item.element || "text",
+        options: parseCustomFieldOptions(item.field_values)
+      }))
+      .filter((item) => item.label && item.key)
 
-    return res.json({ statuses, locations, companies, users, models })
+    return res.json({ statuses, locations, companies, users, models, suppliers, categories, manufacturers, customFields })
   } catch (e) {
     if (e.statusCode) {
       return res.status(e.statusCode).json({ error: e.message })

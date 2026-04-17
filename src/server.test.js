@@ -242,7 +242,15 @@ test('POST /asset cadastra novo ativo no Snipe-IT', async () => {
     const response = await fetch(`http://127.0.0.1:${port}/asset`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeader() },
-      body: JSON.stringify({ name: 'Notebook', model_id: 10, status_id: 2, company_id: 7 })
+      body: JSON.stringify({
+        name: 'Notebook',
+        model_id: 10,
+        status_id: 2,
+        company_id: 7,
+        requestable: 'true',
+        byod: 'false',
+        custom_fields: { _snipeit_service_tag_2: '1K4K0K2' }
+      })
     })
     const data = await response.json()
 
@@ -253,6 +261,9 @@ test('POST /asset cadastra novo ativo no Snipe-IT', async () => {
     assert.equal(requests[0].payload.model_id, 10)
     assert.equal(requests[0].payload.status_id, 2)
     assert.equal(requests[0].payload.company_id, 7)
+    assert.equal(requests[0].payload.requestable, true)
+    assert.equal(requests[0].payload.byod, false)
+    assert.equal(requests[0].payload._snipeit_service_tag_2, '1K4K0K2')
   } finally {
     server.close()
     axios.post = originalPost
@@ -528,7 +539,7 @@ test('POST /api/auth/register e POST /api/auth/login não consultam API do Snipe
 })
 
 
-test('GET /options retorna status, locais, empresas, usuários e modelos', async () => {
+test('GET /options retorna dados para todos os selects de cadastro', async () => {
   const originalGet = axios.get
 
   axios.get = async (url) => {
@@ -552,6 +563,29 @@ test('GET /options retorna status, locais, empresas, usuários e modelos', async
       return { data: { rows: [{ id: 5, name: 'Latitude 5420' }] } }
     }
 
+    if (url.endsWith('/suppliers')) {
+      return { data: { rows: [{ id: 6, name: 'Fornecedor A' }] } }
+    }
+
+    if (url.endsWith('/categories')) {
+      return { data: { rows: [{ id: 7, name: 'Monitor' }] } }
+    }
+
+    if (url.endsWith('/manufacturers')) {
+      return { data: { rows: [{ id: 8, name: 'DELL Computadores' }] } }
+    }
+
+    if (url.endsWith('/fields')) {
+      return {
+        data: {
+          rows: [
+            { name: 'Service Tag', db_column: '_snipeit_service_tag_2', element: 'text', field_values: '' },
+            { name: 'Teletrabalho', db_column: '_snipeit_teletrabalho_8', element: 'radio', field_values: 'Sim\nNão' }
+          ]
+        }
+      }
+    }
+
     throw new Error(`URL inesperada no GET: ${url}`)
   }
 
@@ -568,6 +602,13 @@ test('GET /options retorna status, locais, empresas, usuários e modelos', async
     assert.deepEqual(data.companies, [{ id: 3, name: 'Empresa A' }])
     assert.deepEqual(data.users, [{ id: 4, name: 'Usuário A' }])
     assert.deepEqual(data.models, [{ id: 5, name: 'Latitude 5420' }])
+    assert.deepEqual(data.suppliers, [{ id: 6, name: 'Fornecedor A' }])
+    assert.deepEqual(data.categories, [{ id: 7, name: 'Monitor' }])
+    assert.deepEqual(data.manufacturers, [{ id: 8, name: 'DELL Computadores' }])
+    assert.deepEqual(data.customFields, [
+      { label: 'Service Tag', key: '_snipeit_service_tag_2', element: 'text', options: [] },
+      { label: 'Teletrabalho', key: '_snipeit_teletrabalho_8', element: 'radio', options: ['Sim', 'Não'] }
+    ])
   } finally {
     server.close()
     axios.get = originalGet
