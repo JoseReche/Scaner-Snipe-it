@@ -23,7 +23,7 @@ const htmlRoutes = {
   "/": "login.html",
   "/login": "login.html",
   "/scanner": "scanner.html",
-  "/scanner-pa": "scanner-pa.html",
+  "/cadastro-ativo": "cadastro-ativo.html",
   "/usuario": "usuario.html",
   "/dashboard": "dashboard.html",
   "/register": "register.html",
@@ -50,7 +50,6 @@ app.use("/api/sipe", sipeRouter)
 
 const SNIPE_URL = process.env.SNIPE_URL || "https://SEU-SNIPE/api/v1"
 const PORT = process.env.PORT || 3000
-const DEFAULT_PA_FIELD_KEY = process.env.SNIPE_PA_FIELD_KEY || "_snipeit_pa_6"
 
 const hasValidConfig = !SNIPE_URL.includes("SEU-SNIPE")
 
@@ -78,20 +77,6 @@ const getUserHeaders = async (req) => {
   throw error
 }
 
-const customFieldValue = (asset, fieldName) => {
-  const field = asset.custom_fields?.[fieldName]
-
-  if (!field) {
-    return null
-  }
-
-  if (typeof field.value === "string") {
-    return field.value
-  }
-
-  return field.value ?? null
-}
-
 const mapAsset = (asset) => ({
   id: asset.id,
   assetTag: asset.asset_tag,
@@ -110,12 +95,8 @@ const mapAsset = (asset) => ({
   rtdLocation: asset.rtd_location?.name || null,
   rtdLocationId: asset.rtd_location?.id || null,
   notes: asset.notes || "",
-  pa: customFieldValue(asset, "PA") || asset.rtd_location?.name || null,
   status_id: asset.status_label?.name || null,
   location_id: asset.location || null,
-  custom_fields: {
-    PA: customFieldValue(asset, "PA")
-  },
   customFields: Object.fromEntries(
     Object.entries(asset.custom_fields || {}).map(([key, value]) => [key, value.value ?? null])
   )
@@ -165,26 +146,35 @@ const parseIntegerField = (value) => {
   return parsed
 }
 
-const findPaCustomFieldKey = (asset) => {
-  const entries = Object.entries(asset.custom_fields || {})
-
-  for (const [label, config] of entries) {
-    if (label.trim().toLowerCase() !== "pa") {
-      continue
-    }
-
-    if (typeof config.field === "string" && config.field.trim()) {
-      return config.field
-    }
-
-    if (typeof config.db_column === "string" && config.db_column.trim()) {
-      return config.db_column
-    }
-
-    return label
+const parseBooleanField = (value) => {
+  if (value === true || value === false) {
+    return value
   }
 
-  return null
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase()
+
+    if (["true", "1", "sim", "yes"].includes(normalized)) {
+      return true
+    }
+
+    if (["false", "0", "nao", "não", "no"].includes(normalized)) {
+      return false
+    }
+  }
+
+  return undefined
+}
+
+const parseCustomFieldOptions = (rawValues) => {
+  if (!rawValues || typeof rawValues !== "string") {
+    return []
+  }
+
+  return rawValues
+    .split(/\r?\n|,/)
+    .map((item) => item.trim())
+    .filter(Boolean)
 }
 
 const mapCustomFieldLabelToKey = (asset) => {
@@ -340,12 +330,6 @@ const buildAssetPayload = async (assetId, body, requestHeaders) => {
   const customFields = { ...(body.custom_fields || {}) }
   const customFieldMapping = mapCustomFieldLabelToKey(currentAsset)
 
-  if (body.pa !== undefined && body.pa !== "") {
-    const paFieldKey = findPaCustomFieldKey(currentAsset) || DEFAULT_PA_FIELD_KEY
-
-    customFields[paFieldKey] = body.pa
-  }
-
   for (const [fieldName, value] of Object.entries(customFields)) {
     const normalizedName = fieldName.trim()
 
@@ -359,6 +343,71 @@ const buildAssetPayload = async (assetId, body, requestHeaders) => {
 
   if (Object.keys(payload).length === 0) {
     throw new Error("Nenhum campo válido para atualizar foi enviado")
+  }
+
+  return payload
+}
+
+const buildCreateAssetPayload = (body) => {
+  const payload = {}
+  const allowedTextFields = [
+    "name",
+    "serial",
+    "asset_tag",
+    "notes",
+    "order_number",
+    "purchase_cost",
+    "purchase_date",
+    "expected_checkin"
+  ]
+  const allowedIntegerFields = [
+    "model_id",
+    "status_id",
+    "location_id",
+    "rtd_location_id",
+    "company_id",
+    "supplier_id",
+    "warranty_months",
+    "assigned_to",
+    "category_id",
+    "manufacturer_id"
+  ]
+  const allowedBooleanFields = ["requestable", "byod"]
+
+  for (const field of allowedTextFields) {
+    if (body[field] !== undefined && body[field] !== null && String(body[field]).trim() !== "") {
+      payload[field] = String(body[field]).trim()
+    }
+  }
+
+  for (const field of allowedIntegerFields) {
+    const parsed = parseIntegerField(body[field])
+
+    if (parsed !== undefined) {
+      payload[field] = parsed
+    }
+  }
+
+  for (const field of allowedBooleanFields) {
+    const parsed = parseBooleanField(body[field])
+
+    if (parsed !== undefined) {
+      payload[field] = parsed
+    }
+  }
+
+  if (body.custom_fields && typeof body.custom_fields === "object") {
+    for (const [fieldKey, value] of Object.entries(body.custom_fields)) {
+      if (!fieldKey || value === undefined || value === null || String(value).trim() === "") {
+        continue
+      }
+
+      payload[fieldKey] = value
+    }
+  }
+
+  if (!payload.model_id || !payload.status_id) {
+    throw new Error("Campos model_id e status_id são obrigatórios")
   }
 
   return payload
@@ -419,11 +468,16 @@ app.get("/move-info", async (req, res) => {
 app.get("/options", async (req, res) => {
   try {
     const requestHeaders = await getUserHeaders(req)
-    const [statusRows, locationRows, companyRows, userRows] = await Promise.all([
+    const [statusRows, locationRows, companyRows, userRows, modelRows, supplierRows, categoryRows, manufacturerRows, fieldRows] = await Promise.all([
       fetchPaginatedRows("statuslabels", requestHeaders),
       fetchPaginatedRows("locations", requestHeaders),
       fetchPaginatedRows("companies", requestHeaders),
-      fetchPaginatedRows("users", requestHeaders)
+      fetchPaginatedRows("users", requestHeaders),
+      fetchPaginatedRows("models", requestHeaders),
+      fetchPaginatedRows("suppliers", requestHeaders),
+      fetchPaginatedRows("categories", requestHeaders),
+      fetchPaginatedRows("manufacturers", requestHeaders),
+      fetchPaginatedRows("fields", requestHeaders)
     ])
 
     const statuses = statusRows.map((item) => ({ id: item.id, name: item.name })).filter((item) => item.id && item.name)
@@ -432,8 +486,20 @@ app.get("/options", async (req, res) => {
     const users = userRows
       .map((item) => ({ id: item.id, name: item.name || item.username || item.email }))
       .filter((item) => item.id && item.name)
+    const models = modelRows.map((item) => ({ id: item.id, name: item.name })).filter((item) => item.id && item.name)
+    const suppliers = supplierRows.map((item) => ({ id: item.id, name: item.name })).filter((item) => item.id && item.name)
+    const categories = categoryRows.map((item) => ({ id: item.id, name: item.name })).filter((item) => item.id && item.name)
+    const manufacturers = manufacturerRows.map((item) => ({ id: item.id, name: item.name })).filter((item) => item.id && item.name)
+    const customFields = fieldRows
+      .map((item) => ({
+        label: item.name,
+        key: item.db_column || item.field || item.name,
+        element: item.element || "text",
+        options: parseCustomFieldOptions(item.field_values)
+      }))
+      .filter((item) => item.label && item.key)
 
-    return res.json({ statuses, locations, companies, users })
+    return res.json({ statuses, locations, companies, users, models, suppliers, categories, manufacturers, customFields })
   } catch (e) {
     if (e.statusCode) {
       return res.status(e.statusCode).json({ error: e.message })
@@ -446,33 +512,28 @@ app.get("/options", async (req, res) => {
 })
 
 
-app.post("/move", async (req, res) => {
-  const { asset, pa } = req.body
-
-  if (asset === undefined || asset === null || asset === "" || pa === undefined || pa === null || pa === "") {
-    return res.status(400).json({ error: "Campos asset e pa são obrigatórios" })
-  }
-
+app.post("/asset", async (req, res) => {
   try {
     const requestHeaders = await getUserHeaders(req)
+    const payload = buildCreateAssetPayload(req.body || {})
+    const response = await axios.post(`${SNIPE_URL}/hardware`, payload, { headers: requestHeaders })
 
-    await axios.patch(
-      `${SNIPE_URL}/hardware/${asset}`,
-      {
-        _snipeit_pa_6: pa
-      },
-      { headers: requestHeaders }
-    )
-
-    return res.json({ success: true })
+    return res.status(201).json({
+      success: true,
+      message: response.data?.messages || "Ativo cadastrado com sucesso",
+      details: response.data
+    })
   } catch (e) {
     if (e.statusCode) {
       return res.status(e.statusCode).json({ error: e.message })
     }
 
-    // Ponto de debug no fluxo de movimentação de ativo.
-    logApiError("POST /move", e)
-    return res.status(getErrorStatusCode(e)).json(buildClientError(e, "Erro ao mover ativo"))
+    if (e.message === "Campos model_id e status_id são obrigatórios") {
+      return res.status(400).json({ error: e.message })
+    }
+
+    logApiError("POST /asset", e)
+    return res.status(getErrorStatusCode(e)).json(buildClientError(e, "Erro ao cadastrar ativo"))
   }
 })
 
@@ -494,7 +555,7 @@ app.patch("/asset/:id", async (req, res) => {
       return res.status(400).json({ error: e.message })
     }
 
-    return res.status(getErrorStatusCode(e)).json(buildClientError(e, "Erro ao identificar o campo PA"))
+    return res.status(getErrorStatusCode(e)).json(buildClientError(e, "Erro ao identificar campos customizados"))
   }
 
   try {
@@ -598,7 +659,7 @@ if (require.main === module) {
 module.exports = {
   app,
   buildAssetPayload,
+  buildCreateAssetPayload,
   mapCustomFieldLabelToKey,
-  parseIntegerField,
-  findPaCustomFieldKey
+  parseIntegerField
 }

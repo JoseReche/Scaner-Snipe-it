@@ -21,9 +21,9 @@ const { generateAccessToken } = require('./auth/jwt')
 const {
   app,
   buildAssetPayload,
+  buildCreateAssetPayload,
   parseIntegerField,
-  mapCustomFieldLabelToKey,
-  findPaCustomFieldKey
+  mapCustomFieldLabelToKey
 } = require('./server')
 
 
@@ -70,10 +70,10 @@ const baseAsset = {
   name: 'Notebook',
   status_label: { id: 2, name: 'Ativo' },
   location: { id: 3, name: 'Matriz' },
-  rtd_location: { id: 4, name: 'PA-OLD' },
+  rtd_location: { id: 4, name: 'Sala TI - C3' },
   custom_fields: {
-    PA: { field: '_snipeit_pa_1', value: 'PA-OLD' },
-    'MAC Address': { field: '_snipeit_mac_address_2', value: 'AA:BB' }
+    'Centro de Custo': { field: '_snipeit_centro_de_custo_5', value: 'SAESHIA do Sucesso - Pós-Graduação' },
+    Teletrabalho: { field: '_snipeit_teletrabalho_8', value: 'Não' }
   }
 }
 
@@ -88,13 +88,9 @@ test('parseIntegerField converte inteiros e ignora inválidos', () => {
 
 test('mapCustomFieldLabelToKey cria mapeamento por label e key interno', () => {
   const mapping = mapCustomFieldLabelToKey(baseAsset)
-  assert.equal(mapping.PA, '_snipeit_pa_1')
-  assert.equal(mapping.pa, '_snipeit_pa_1')
-  assert.equal(mapping['_snipeit_pa_1'], '_snipeit_pa_1')
-})
-
-test('findPaCustomFieldKey identifica o field key real do PA', () => {
-  assert.equal(findPaCustomFieldKey(baseAsset), '_snipeit_pa_1')
+  assert.equal(mapping['Centro de Custo'], '_snipeit_centro_de_custo_5')
+  assert.equal(mapping['centro de custo'], '_snipeit_centro_de_custo_5')
+  assert.equal(mapping['_snipeit_centro_de_custo_5'], '_snipeit_centro_de_custo_5')
 })
 
 test('buildAssetPayload ignora name/serial e monta payload flat com custom fields', async () => {
@@ -104,16 +100,15 @@ test('buildAssetPayload ignora name/serial e monta payload flat com custom field
 
   const payload = await buildAssetPayload(10, {
     serial: 'S2',
-    pa: 'PA-NEW',
     status_id: '5',
-    custom_fields: { 'MAC Address': 'CC:DD' }
+    custom_fields: { 'Centro de Custo': 'Financeiro', Teletrabalho: 'Sim' }
   })
 
   assert.equal(payload.name, undefined)
   assert.equal(payload.serial, undefined)
   assert.equal(payload.status_id, 5)
-  assert.equal(payload._snipeit_pa_1, 'PA-NEW')
-  assert.equal(payload._snipeit_mac_address_2, 'CC:DD')
+  assert.equal(payload._snipeit_centro_de_custo_5, 'Financeiro')
+  assert.equal(payload._snipeit_teletrabalho_8, 'Sim')
   assert.equal(payload.custom_fields, undefined)
 
   axios.get = originalGet
@@ -126,16 +121,16 @@ test('buildAssetPayload usa db_column quando o custom field não expõe a propri
     data: {
       ...baseAsset,
       custom_fields: {
-        PA: { db_column: '_snipeit_pa_6', value: 'PA-OLD' }
+        Teletrabalho: { db_column: '_snipeit_teletrabalho_8', value: 'Não' }
       }
     }
   })
 
   const payload = await buildAssetPayload(10, {
-    pa: 'PA-NEW'
+    custom_fields: { Teletrabalho: 'Sim' }
   })
 
-  assert.equal(payload._snipeit_pa_6, 'PA-NEW')
+  assert.equal(payload._snipeit_teletrabalho_8, 'Sim')
 
   axios.get = originalGet
 })
@@ -183,14 +178,14 @@ test('PATCH /asset/:id aplica atualização e devolve ativo mapeado', async () =
     const response = await fetch(`http://127.0.0.1:${port}/asset/10`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', ...authHeader() },
-      body: JSON.stringify({ pa: 'PA-API', status_id: '7' })
+      body: JSON.stringify({ status_id: '7', custom_fields: { Teletrabalho: 'Sim' } })
     })
     const data = await response.json()
 
     assert.equal(response.status, 200)
     assert.equal(data.success, true)
     assert.equal(requests.length, 1)
-    assert.equal(requests[0].payload._snipeit_pa_1, 'PA-API')
+    assert.equal(requests[0].payload._snipeit_teletrabalho_8, 'Sim')
     assert.equal(requests[0].payload.status_id, 7)
     assert.equal(requests[0].payload.custom_fields, undefined)
   } finally {
@@ -220,41 +215,58 @@ test('GET /move-info retorna o payload bruto do Snipe-IT', async () => {
 
     assert.equal(response.status, 200)
     assert.equal(data.id, 10)
-    assert.equal(data.custom_fields.PA.value, 'PA-OLD')
+    assert.equal(data.custom_fields.Teletrabalho.value, 'Não')
   } finally {
     server.close()
     axios.get = originalGet
   }
 })
 
-test('POST /move atualiza o campo customizado _snipeit_pa_6', async () => {
-  const originalPatch = axios.patch
+test('buildCreateAssetPayload exige model_id e status_id', () => {
+  assert.throws(() => buildCreateAssetPayload({ name: 'Ativo sem campos obrigatórios' }), /model_id e status_id/)
+})
+
+test('POST /asset cadastra novo ativo no Snipe-IT', async () => {
+  const originalPost = axios.post
   const requests = []
 
-  axios.patch = async (url, payload) => {
+  axios.post = async (url, payload) => {
     requests.push({ url, payload })
-    return { data: { status: 'success' } }
+    return { data: { status: 'success', messages: 'Asset created' } }
   }
 
   const server = app.listen(0)
   const { port } = server.address()
 
   try {
-    const response = await fetch(`http://127.0.0.1:${port}/move`, {
+    const response = await fetch(`http://127.0.0.1:${port}/asset`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...authHeader() },
-      body: JSON.stringify({ asset: 10, pa: 'PA-NOVO' })
+      body: JSON.stringify({
+        name: 'Notebook',
+        model_id: 10,
+        status_id: 2,
+        company_id: 7,
+        requestable: 'true',
+        byod: 'false',
+        custom_fields: { _snipeit_service_tag_2: '1K4K0K2' }
+      })
     })
     const data = await response.json()
 
-    assert.equal(response.status, 200)
+    assert.equal(response.status, 201)
     assert.equal(data.success, true)
     assert.equal(requests.length, 1)
-    assert.equal(requests[0].payload._snipeit_pa_6, 'PA-NOVO')
-    assert.equal(requests[0].payload.rtd_location_id, undefined)
+    assert.match(requests[0].url, /\/hardware$/)
+    assert.equal(requests[0].payload.model_id, 10)
+    assert.equal(requests[0].payload.status_id, 2)
+    assert.equal(requests[0].payload.company_id, 7)
+    assert.equal(requests[0].payload.requestable, true)
+    assert.equal(requests[0].payload.byod, false)
+    assert.equal(requests[0].payload._snipeit_service_tag_2, '1K4K0K2')
   } finally {
     server.close()
-    axios.patch = originalPatch
+    axios.post = originalPost
   }
 })
 
@@ -527,7 +539,7 @@ test('POST /api/auth/register e POST /api/auth/login não consultam API do Snipe
 })
 
 
-test('GET /options retorna status, locais, empresas e usuários', async () => {
+test('GET /options retorna dados para todos os selects de cadastro', async () => {
   const originalGet = axios.get
 
   axios.get = async (url) => {
@@ -547,6 +559,33 @@ test('GET /options retorna status, locais, empresas e usuários', async () => {
       return { data: { rows: [{ id: 4, name: 'Usuário A' }] } }
     }
 
+    if (url.endsWith('/models')) {
+      return { data: { rows: [{ id: 5, name: 'Latitude 5420' }] } }
+    }
+
+    if (url.endsWith('/suppliers')) {
+      return { data: { rows: [{ id: 6, name: 'Fornecedor A' }] } }
+    }
+
+    if (url.endsWith('/categories')) {
+      return { data: { rows: [{ id: 7, name: 'Monitor' }] } }
+    }
+
+    if (url.endsWith('/manufacturers')) {
+      return { data: { rows: [{ id: 8, name: 'DELL Computadores' }] } }
+    }
+
+    if (url.endsWith('/fields')) {
+      return {
+        data: {
+          rows: [
+            { name: 'Service Tag', db_column: '_snipeit_service_tag_2', element: 'text', field_values: '' },
+            { name: 'Teletrabalho', db_column: '_snipeit_teletrabalho_8', element: 'radio', field_values: 'Sim\nNão' }
+          ]
+        }
+      }
+    }
+
     throw new Error(`URL inesperada no GET: ${url}`)
   }
 
@@ -562,6 +601,14 @@ test('GET /options retorna status, locais, empresas e usuários', async () => {
     assert.deepEqual(data.locations, [{ id: 2, name: 'Matriz' }])
     assert.deepEqual(data.companies, [{ id: 3, name: 'Empresa A' }])
     assert.deepEqual(data.users, [{ id: 4, name: 'Usuário A' }])
+    assert.deepEqual(data.models, [{ id: 5, name: 'Latitude 5420' }])
+    assert.deepEqual(data.suppliers, [{ id: 6, name: 'Fornecedor A' }])
+    assert.deepEqual(data.categories, [{ id: 7, name: 'Monitor' }])
+    assert.deepEqual(data.manufacturers, [{ id: 8, name: 'DELL Computadores' }])
+    assert.deepEqual(data.customFields, [
+      { label: 'Service Tag', key: '_snipeit_service_tag_2', element: 'text', options: [] },
+      { label: 'Teletrabalho', key: '_snipeit_teletrabalho_8', element: 'radio', options: ['Sim', 'Não'] }
+    ])
   } finally {
     server.close()
     axios.get = originalGet

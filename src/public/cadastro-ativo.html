@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cadastro de Ativo</title>
+<link rel="stylesheet" href="/auth.css" />
+</head>
+<body>
+<div class="container">
+  <div class="topbar">
+    <h3>Cadastro de Ativo</h3>
+    <div class="menu-wrapper">
+      <button id="menu-toggle" class="menu-toggle" type="button" aria-label="Abrir menu">☰</button>
+      <nav id="menu-panel" class="menu-panel" aria-label="Navegação principal">
+        <a href="/scanner">Scanner</a>
+        <a href="/cadastro-ativo">Cadastro de Ativo</a>
+        <a href="/home-office">Baixa Home Office</a>
+        <a href="/usuario">Usuário</a>
+        <a href="/dashboard">Dashboard</a>
+        <a href="#" onclick="logout(event)">Sair</a>
+      </nav>
+    </div>
+  </div>
+
+  <div class="grid single-column">
+    <section class="card">
+      <h3>Novo ativo</h3>
+      <p class="small">Formulário completo de cadastro com os principais campos disponíveis no Snipe-IT.</p>
+
+      <label>Nome</label>
+      <input id="name" placeholder="Ex.: Monitor 19\"">
+
+      <label>Tag do ativo</label>
+      <input id="assetTag" placeholder="Ex.: 105633">
+
+      <label>Serial</label>
+      <input id="serial" placeholder="Ex.: BR-00KFDW-TVB00-839-2GFI-A04">
+
+      <label>Modelo *</label>
+      <select id="model"></select>
+
+      <label>Status *</label>
+      <select id="status"></select>
+
+      <label>Categoria</label>
+      <select id="category"></select>
+
+      <label>Fabricante</label>
+      <select id="manufacturer"></select>
+
+      <label>Fornecedor</label>
+      <select id="supplier"></select>
+
+      <label>Local</label>
+      <select id="location"></select>
+
+      <label>Local padrão (RTD)</label>
+      <select id="rtdLocation"></select>
+
+      <label>Empresa</label>
+      <select id="company"></select>
+
+      <label>Atribuído para</label>
+      <select id="assignedTo"></select>
+
+      <label>Solicitável</label>
+      <select id="requestable">
+        <option value="">Selecione</option>
+        <option value="true">Sim</option>
+        <option value="false">Não</option>
+      </select>
+
+      <label>BYOD</label>
+      <select id="byod">
+        <option value="">Selecione</option>
+        <option value="true">Sim</option>
+        <option value="false">Não</option>
+      </select>
+
+      <label>Número do pedido</label>
+      <input id="orderNumber" placeholder="Ex.: Pedido 2026-001">
+
+      <label>Data de compra</label>
+      <input id="purchaseDate" type="date">
+
+      <label>Custo de compra</label>
+      <input id="purchaseCost" placeholder="Ex.: 829,99">
+
+      <label>Meses de garantia</label>
+      <input id="warrantyMonths" type="number" min="0" placeholder="Ex.: 12">
+
+      <label>Previsão de check-in</label>
+      <input id="expectedCheckin" type="date">
+
+      <label>Notas</label>
+      <textarea id="notes" placeholder="Observações adicionais"></textarea>
+
+      <h3 style="margin-top: 16px">Campos customizados</h3>
+      <div id="customFieldsContainer" class="small">Carregando campos customizados...</div>
+
+      <button id="saveButton" onclick="createAsset()">Cadastrar ativo</button>
+      <p id="feedback" class="message" aria-live="polite"></p>
+    </section>
+  </div>
+</div>
+
+<script src="/js/auth.js"></script>
+<script>
+requireAuthToken()
+
+const byId = (id) => document.getElementById(id)
+const menuToggle = byId('menu-toggle')
+const menuPanel = byId('menu-panel')
+let customFields = []
+
+menuToggle.addEventListener('click', () => {
+  menuPanel.classList.toggle('open')
+})
+
+document.addEventListener('click', (event) => {
+  if (!menuPanel.contains(event.target) && !menuToggle.contains(event.target)) {
+    menuPanel.classList.remove('open')
+  }
+})
+
+const authHeaders = (extra = {}) => ({
+  ...extra,
+  Authorization: `Bearer ${getJwtToken()}`
+})
+
+function logout(event) {
+  if (event) event.preventDefault()
+  clearJwtToken()
+  window.location.href = '/login'
+}
+
+function isAuthTokenError(data) {
+  const message = (data?.error || '').toLowerCase()
+  return message.includes('token inválido') || message.includes('token ausente') || message.includes('token expirado')
+}
+
+function fillSelect(selectId, options, placeholder) {
+  const select = byId(selectId)
+  select.innerHTML = ''
+
+  const empty = document.createElement('option')
+  empty.value = ''
+  empty.textContent = placeholder
+  select.appendChild(empty)
+
+  options.forEach((opt) => {
+    const element = document.createElement('option')
+    element.value = opt.id
+    element.textContent = `${opt.id} - ${opt.name}`
+    select.appendChild(element)
+  })
+}
+
+function setFeedback(message, type = '') {
+  const feedback = byId('feedback')
+  feedback.textContent = message
+  feedback.className = `message ${type}`.trim()
+}
+
+function renderCustomFields(fields) {
+  const container = byId('customFieldsContainer')
+
+  if (!Array.isArray(fields) || fields.length === 0) {
+    container.textContent = 'Nenhum campo customizado disponível.'
+    return
+  }
+
+  container.innerHTML = ''
+
+  fields.forEach((field, index) => {
+    const wrapper = document.createElement('div')
+    wrapper.style.marginBottom = '12px'
+
+    const label = document.createElement('label')
+    label.textContent = field.label
+    label.setAttribute('for', `custom-field-${index}`)
+
+    let input = null
+
+    if ((field.element === 'listbox' || field.element === 'radio') && Array.isArray(field.options) && field.options.length > 0) {
+      input = document.createElement('select')
+      const empty = document.createElement('option')
+      empty.value = ''
+      empty.textContent = 'Selecione'
+      input.appendChild(empty)
+
+      field.options.forEach((option) => {
+        const opt = document.createElement('option')
+        opt.value = option
+        opt.textContent = option
+        input.appendChild(opt)
+      })
+    } else {
+      input = document.createElement('input')
+      input.type = 'text'
+      input.placeholder = `Informe ${field.label}`
+    }
+
+    input.id = `custom-field-${index}`
+    input.dataset.customFieldKey = field.key
+
+    wrapper.appendChild(label)
+    wrapper.appendChild(input)
+    container.appendChild(wrapper)
+  })
+}
+
+function collectCustomFieldsPayload() {
+  const payload = {}
+  const inputs = document.querySelectorAll('[data-custom-field-key]')
+
+  inputs.forEach((input) => {
+    const key = input.dataset.customFieldKey
+    const value = input.value
+
+    if (key && value !== undefined && value !== null && String(value).trim() !== '') {
+      payload[key] = value
+    }
+  })
+
+  return payload
+}
+
+async function loadOptions() {
+  const response = await fetch('/options', { headers: authHeaders() })
+  const data = await response.json()
+
+  if (response.status === 401 && isAuthTokenError(data)) {
+    logout()
+    return
+  }
+
+  if (!response.ok) {
+    setFeedback(data.error || 'Falha ao carregar opções', 'error')
+    return
+  }
+
+  fillSelect('model', data.models || [], 'Selecione')
+  fillSelect('status', data.statuses || [], 'Selecione')
+  fillSelect('category', data.categories || [], 'Selecione')
+  fillSelect('manufacturer', data.manufacturers || [], 'Selecione')
+  fillSelect('supplier', data.suppliers || [], 'Selecione')
+  fillSelect('location', data.locations || [], 'Selecione')
+  fillSelect('rtdLocation', data.locations || [], 'Selecione')
+  fillSelect('company', data.companies || [], 'Selecione')
+  fillSelect('assignedTo', data.users || [], 'Selecione')
+
+  customFields = data.customFields || []
+  renderCustomFields(customFields)
+}
+
+async function createAsset() {
+  const payload = {
+    name: byId('name').value,
+    asset_tag: byId('assetTag').value,
+    serial: byId('serial').value,
+    model_id: byId('model').value,
+    status_id: byId('status').value,
+    category_id: byId('category').value,
+    manufacturer_id: byId('manufacturer').value,
+    supplier_id: byId('supplier').value,
+    location_id: byId('location').value,
+    rtd_location_id: byId('rtdLocation').value,
+    company_id: byId('company').value,
+    assigned_to: byId('assignedTo').value,
+    requestable: byId('requestable').value,
+    byod: byId('byod').value,
+    order_number: byId('orderNumber').value,
+    purchase_date: byId('purchaseDate').value,
+    purchase_cost: byId('purchaseCost').value,
+    warranty_months: byId('warrantyMonths').value,
+    expected_checkin: byId('expectedCheckin').value,
+    notes: byId('notes').value,
+    custom_fields: collectCustomFieldsPayload()
+  }
+
+  const button = byId('saveButton')
+  button.disabled = true
+  button.textContent = 'Cadastrando...'
+  setFeedback('')
+
+  const response = await fetch('/asset', {
+    method: 'POST',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    body: JSON.stringify(payload)
+  })
+
+  const data = await response.json()
+
+  if (response.status === 401 && isAuthTokenError(data)) {
+    logout()
+    return
+  }
+
+  if (!response.ok) {
+    setFeedback(data.error || 'Falha ao cadastrar ativo', 'error')
+    button.disabled = false
+    button.textContent = 'Cadastrar ativo'
+    return
+  }
+
+  setFeedback('Ativo cadastrado com sucesso.', 'success')
+  button.disabled = false
+  button.textContent = 'Cadastrar ativo'
+}
+
+loadOptions()
+</script>
+</body>
+</html>
