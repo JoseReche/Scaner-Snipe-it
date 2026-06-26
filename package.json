@@ -1,0 +1,18 @@
+{
+  "name": "snipe-it-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@zxing/browser": "^0.2.0",
+    "@zxing/library": "^0.22.0",
+    "mysql2": "^3.22.5",
+    "nodemailer": "^9.0.1"
+  }
+}

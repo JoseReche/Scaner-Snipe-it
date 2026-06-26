@@ -1,0 +1,16 @@
+[Unit]
+Description=Snipe-IT Mobile CENSUPEG
+After=network.target mariadb.service
+
+[Service]
+Type=simple
+User=snipe-mobile
+Group=snipe-mobile
+WorkingDirectory=/opt/snipe-it-mobile
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node /opt/snipe-it-mobile/server.js
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

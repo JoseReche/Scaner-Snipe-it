@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>CENSUPEG Inventario</title>
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand-lockup">
+        <span class="brand-mark">CE</span>
+        <div>
+          <p class="eyebrow">CENSUPEG</p>
+          <h1>Entrega de Equipamentos</h1>
+        </div>
+      </div>
+      <div id="topActions" class="top-actions hidden">
+        <span id="syncStatus" class="status">Verificando</span>
+        <button id="adminToggle" class="icon-button hidden" type="button">Admin</button>
+        <button id="configToggle" class="icon-button" type="button">API</button>
+        <button id="logoutButton" class="icon-button" type="button">Sair</button>
+      </div>
+    </header>
+
+    <main class="shell">
+      <section id="loginView" class="panel auth-panel">
+        <h2>Entrar</h2>
+        <label>
+          Usuario
+          <input id="loginUsername" autocomplete="username" placeholder="root">
+        </label>
+        <label>
+          Senha
+          <input id="loginPassword" type="password" autocomplete="current-password" placeholder="admin">
+        </label>
+        <button id="loginButton" class="submit" type="button">Entrar</button>
+        <p id="loginMessage" class="config-message"></p>
+      </section>
+
+      <section id="appView" class="hidden">
+        <section id="overdueAlert" class="alert-panel hidden">
+          <div>
+            <strong>Emprestimos em atraso</strong>
+            <p id="overdueSummary"></p>
+          </div>
+          <button id="viewOverdueAdmin" type="button">Ver detalhes</button>
+        </section>
+
+        <section id="configPanel" class="config-panel hidden">
+          <div class="section-title">
+            <h2>Minha API Snipe-IT</h2>
+            <button id="testConnection" type="button">Testar</button>
+          </div>
+          <label>
+            URL do Snipe-IT
+            <input id="snipeItUrl" autocomplete="off" placeholder="https://equipamentos.censupeg.com.br">
+          </label>
+          <label>
+            Token de API
+            <input id="snipeItToken" type="password" autocomplete="off" placeholder="Cole seu token pessoal">
+          </label>
+          <button id="saveConfig" class="submit secondary" type="button">Salvar minha API</button>
+          <p id="configMessage" class="config-message"></p>
+        </section>
+
+        <section id="passwordPanel" class="config-panel hidden">
+          <div class="section-title">
+            <h2>Alterar senha</h2>
+          </div>
+          <label>
+            Senha atual
+            <input id="currentPassword" type="password" autocomplete="current-password">
+          </label>
+          <label>
+            Nova senha
+            <input id="newPassword" type="password" autocomplete="new-password">
+          </label>
+          <button id="changePassword" class="submit secondary" type="button">Atualizar senha</button>
+          <p id="passwordMessage" class="config-message"></p>
+        </section>
+
+        <nav class="flow-tabs" aria-label="Fluxos">
+          <button class="active" data-flow="delivery">Entrega</button>
+          <button data-flow="loan">Emprestimo</button>
+          <button data-flow="asset-create">Criar ativo</button>
+          <button data-flow="receiving">Recebimento</button>
+          <button data-flow="return-audit">Devolucao</button>
+        </nav>
+
+        <form id="recordForm" class="panel">
+          <section class="summary">
+            <h2 id="flowTitle">Entrega de material</h2>
+            <p id="flowDescription">Registre saida definitiva ou entrega para uma pessoa ou local.</p>
+          </section>
+
+          <div id="assetFields" class="field-grid">
+            <label class="wide">
+              Buscar ativo no Snipe-IT
+              <div class="scan-actions">
+                <button class="scan-button" type="button" data-scan-target="asset">Ler QR da etiqueta</button>
+              </div>
+              <div class="searchbox">
+                <input id="assetSearch" autocomplete="off" placeholder="Digite patrimonio, serial ou nome">
+                <div id="assetResults" class="search-results hidden"></div>
+              </div>
+            </label>
+            <input name="assetId" type="hidden">
+            <label>
+              Patrimonio visivel
+              <input name="assetTag" autocomplete="off" placeholder="Ex.: CENSUN419">
+            </label>
+            <div id="assetCurrentInfo" class="selected-info wide hidden"></div>
+          </div>
+
+          <div id="consumableFields" class="field-grid hidden">
+            <label>
+              Tipo de item
+              <select name="inventoryType" id="inventoryType">
+                <option value="consumables">Toner / consumivel</option>
+                <option value="accessories">Periferico</option>
+              </select>
+            </label>
+            <label class="wide">
+              Buscar item no estoque
+              <div class="scan-actions">
+                <button class="scan-button" type="button" data-scan-target="inventory">Ler QR da etiqueta</button>
+              </div>
+              <div class="searchbox">
+                <input id="consumableSearch" autocomplete="off" placeholder="Digite toner, cabo, mouse, memoria...">
+                <div id="consumableResults" class="search-results hidden"></div>
+              </div>
+            </label>
+            <input name="inventoryItemId" type="hidden">
+            <label>
+              Quantidade recebida
+              <input name="quantity" type="number" min="1" value="1">
+            </label>
+            <label class="checkline">
+              <input type="checkbox" name="createInventoryItem">
+              Criar novo toner/periferico se necessario
+            </label>
+            <div id="newInventoryFields" class="field-grid nested-fields hidden">
+              <label>
+                Nome do novo item
+                <input name="inventoryName" autocomplete="off" placeholder="Ex.: Toner HP 414A Preto">
+              </label>
+              <label>
+                ID da categoria
+                <input name="inventoryCategoryId" inputmode="numeric" autocomplete="off" placeholder="Categoria no Snipe-IT">
+              </label>
+              <label>
+                ID do fabricante
+                <input name="inventoryManufacturerId" inputmode="numeric" autocomplete="off" placeholder="Opcional">
+              </label>
+              <label>
+                Modelo / numero
+                <input name="inventoryModelNumber" autocomplete="off" placeholder="Opcional">
+              </label>
+            </div>
+          </div>
+
+          <div id="assetCreateFields" class="field-grid hidden">
+            <label>
+              Patrimonio do ativo
+              <input name="newAssetTag" autocomplete="off" placeholder="Ex.: CENSUN500">
+            </label>
+            <label>
+              Nome do ativo
+              <input name="newAssetName" autocomplete="off" placeholder="Ex.: Notebook Dell Financeiro">
+            </label>
+            <label>
+              Serial
+              <input name="newAssetSerial" autocomplete="off">
+            </label>
+            <label>
+              ID do modelo
+              <input name="newAssetModelId" inputmode="numeric" autocomplete="off" placeholder="Obrigatorio no Snipe-IT">
+            </label>
+            <label>
+              Status inicial
+              <select name="newAssetStatusId" id="newAssetStatusId"></select>
+            </label>
+            <label>
+              Local inicial
+              <div class="searchbox">
+                <input id="newAssetLocationSearch" autocomplete="off" placeholder="Buscar local no Snipe-IT">
+                <div id="newAssetLocationResults" class="search-results hidden"></div>
+              </div>
+              <input name="newAssetLocationId" type="hidden">
+            </label>
+          </div>
+
+          <fieldset id="destinationFields">
+            <legend>Destino</legend>
+            <div class="segmented">
+              <label><input type="radio" name="destinationType" value="user" checked> Pessoa</label>
+              <label><input type="radio" name="destinationType" value="location"> Local</label>
+            </div>
+            <div class="field-grid">
+              <label class="wide">
+                Buscar destino
+                <div class="searchbox">
+                  <input id="destinationSearch" autocomplete="off" placeholder="Digite nome da pessoa ou local">
+                  <div id="destinationResults" class="search-results hidden"></div>
+                </div>
+              </label>
+              <input name="destinationId" type="hidden">
+              <label>
+                Nome para conferencia
+                <input name="destinationName" autocomplete="off" placeholder="Nome do receptor">
+              </label>
+              <label class="wide">
+                E-mail do receptor
+                <input name="destinationEmail" type="email" autocomplete="off" placeholder="email vindo do Snipe-IT">
+              </label>
+            </div>
+            <label class="checkline">
+              <input type="checkbox" name="createLocation">
+              Criar novo local se necessario
+            </label>
+            <label id="locationNameWrap" class="hidden">
+              Nome do novo local
+              <input name="locationName" autocomplete="off" placeholder="Ex.: Sala Reuniao 2">
+            </label>
+          </fieldset>
+
+          <div class="field-grid">
+            <label>
+              Data da movimentacao
+              <input name="date" type="date">
+            </label>
+            <label id="checkoutStatusWrap">
+              Status apos saida
+              <select name="checkoutStatusId" id="checkoutStatusId"></select>
+            </label>
+            <label id="returnDateWrap" class="hidden">
+              Devolucao prevista
+              <input name="returnDate" type="date">
+            </label>
+            <label id="checkinStatusWrap" class="hidden">
+              Status apos retorno
+              <select name="checkinStatusId" id="checkinStatusId"></select>
+            </label>
+            <label id="auditLocationWrap" class="hidden">
+              Local auditado
+              <div class="searchbox">
+                <input id="auditLocationSearch" autocomplete="off" placeholder="Buscar local no Snipe-IT">
+                <div id="auditLocationResults" class="search-results hidden"></div>
+              </div>
+              <input name="auditLocationId" type="hidden">
+            </label>
+            <label id="nextAuditWrap" class="hidden">
+              Proxima auditoria
+              <input name="nextAuditDate" type="date">
+            </label>
+          </div>
+
+          <label>
+            Nota
+            <textarea name="note" rows="4" placeholder="Estado do material, motivo, centro de custo ou observacoes."></textarea>
+          </label>
+
+          <section id="termSection" class="term-box">
+            <div class="section-title">
+              <h2 id="termTitle">Termo de entrega</h2>
+              <button id="clearSignature" type="button">Limpar</button>
+            </div>
+            <div id="termPreview" class="term-preview"></div>
+            <label>
+              Nome de quem assinou
+              <input name="signerName" autocomplete="off" placeholder="Nome completo">
+            </label>
+            <canvas id="signaturePad" width="680" height="220"></canvas>
+          </section>
+
+          <section class="camera">
+            <div>
+              <h3>Foto do material</h3>
+              <p>Use a camera do celular na hora do cadastro.</p>
+            </div>
+            <label class="photo-button">
+              Tirar foto
+              <input id="photoInput" type="file" accept="image/*" capture="environment">
+            </label>
+            <img id="photoPreview" alt="" class="hidden">
+          </section>
+
+          <button class="submit" type="submit">Registrar no Snipe-IT</button>
+        </form>
+
+        <section class="history">
+          <div class="section-title">
+            <h2>Ultimos registros</h2>
+            <button id="refreshHistory" type="button">Atualizar</button>
+          </div>
+          <div id="historyList" class="history-list"></div>
+        </section>
+      </section>
+
+      <section id="adminView" class="hidden">
+        <section class="panel">
+          <div class="section-title">
+            <h2>Dashboard</h2>
+            <button id="backToApp" type="button">Operacao</button>
+          </div>
+          <div id="adminCards" class="dashboard-grid"></div>
+          <div id="overdueList" class="admin-list overdue-list"></div>
+        </section>
+
+        <section class="panel admin-section">
+          <div class="section-title">
+            <h2>Usuarios</h2>
+            <button id="createUser" type="button">Criar</button>
+          </div>
+          <div class="field-grid">
+            <label>
+              Usuario
+              <input id="newUserUsername" autocomplete="off">
+            </label>
+            <label>
+              Nome
+              <input id="newUserName" autocomplete="off">
+            </label>
+            <label>
+              Senha inicial
+              <input id="newUserPassword" type="password">
+            </label>
+            <label>
+              Perfil
+              <select id="newUserRole">
+                <option value="operator">Operador</option>
+                <option value="admin">Administrador</option>
+              </select>
+            </label>
+          </div>
+          <div id="usersList" class="admin-list"></div>
+        </section>
+
+        <section class="panel admin-section">
+          <h2>Termos</h2>
+          <label>
+            Termo de entrega
+            <textarea id="deliveryTerm" rows="8"></textarea>
+          </label>
+          <label>
+            Termo de devolucao
+            <textarea id="returnTerm" rows="8"></textarea>
+          </label>
+          <button id="saveTerms" class="submit secondary" type="button">Salvar termos</button>
+          <p id="adminMessage" class="config-message"></p>
+        </section>
+
+        <section class="panel admin-section note-panel">
+          <h2>E-mail</h2>
+          <p>A configuracao SMTP fica somente no arquivo <code>.env</code>. Assim a senha de e-mail nao fica exposta no painel.</p>
+        </section>
+      </section>
+    </main>
+
+    <template id="historyTemplate">
+      <article class="history-item">
+        <div>
+          <strong></strong>
+          <p></p>
+        </div>
+        <span></span>
+      </article>
+    </template>
+
+    <div id="scannerModal" class="scanner-modal hidden" role="dialog" aria-modal="true">
+      <div class="scanner-panel">
+        <div class="section-title">
+          <h2>Leitor de etiqueta</h2>
+          <button id="closeScanner" type="button">Fechar</button>
+        </div>
+        <div class="scanner-frame">
+          <video id="scannerVideo" playsinline muted></video>
+          <div class="scanner-reticle"></div>
+        </div>
+        <p id="scannerMessage" class="config-message">Aponte a camera para o QR Code da etiqueta.</p>
+        <label>
+          Codigo lido manualmente
+          <input id="manualScanValue" autocomplete="off" placeholder="Cole ou digite o codigo da etiqueta">
+        </label>
+        <button id="applyManualScan" class="submit secondary" type="button">Usar codigo</button>
+      </div>
+    </div>
+
+    <script src="/vendor/zxing-browser.min.js"></script>
+    <script src="/app.js" type="module"></script>
+  </body>
+</html>
