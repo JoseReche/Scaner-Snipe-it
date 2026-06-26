@@ -101,6 +101,24 @@ Nos campos de ativo e estoque, use `Ler QR da etiqueta`. O app aceita:
 
 No celular, a camera precisa de `HTTPS` ou `localhost`. Se o app for aberto por IP em `http`, o navegador bloqueia a camera e o app mostra um campo para digitar ou colar o codigo manualmente.
 
+## HTTPS direto no Node
+
+Para usar a camera no celular sem Nginx, gere um certificado local e configure:
+
+```env
+HTTPS=true
+SSL_CERT=/opt/certs/snipe-mobile/snipe-mobile.crt
+SSL_KEY=/opt/certs/snipe-mobile/snipe-mobile.key
+```
+
+Depois acesse:
+
+```text
+https://192.168.0.3:3010
+```
+
+O arquivo da autoridade local (`localCA.crt`) precisa ser instalado nos celulares como certificado de CA confiavel.
+
 ## Banco de dados
 
 Por padrao, a persistencia local fica em JSON para facilitar o uso imediato:

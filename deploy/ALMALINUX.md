@@ -156,6 +156,70 @@ sudo dnf install -y certbot python3-certbot-nginx
 sudo certbot --nginx -d mobile-equipamentos.seudominio.com.br
 ```
 
+### HTTPS sem Nginx
+
+Se quiser servir HTTPS direto pelo Node.js, gere uma CA local e um certificado para o IP do servidor:
+
+```bash
+sudo mkdir -p /opt/certs/snipe-mobile
+cd /opt/certs/snipe-mobile
+
+sudo openssl genrsa -out localCA.key 4096
+sudo openssl req -x509 -new -nodes -key localCA.key -sha256 -days 3650 -out localCA.crt
+
+sudo openssl genrsa -out snipe-mobile.key 2048
+sudo tee snipe-mobile.ext >/dev/null <<'EOF'
+authorityKeyIdentifier=keyid,issuer
+basicConstraints=CA:FALSE
+keyUsage=digitalSignature, keyEncipherment
+extendedKeyUsage=serverAuth
+subjectAltName=@alt_names
+
+[alt_names]
+IP.1=192.168.0.3
+DNS.1=snipe-mobile.local
+EOF
+
+sudo openssl req -new -key snipe-mobile.key -out snipe-mobile.csr
+sudo openssl x509 -req \
+  -in snipe-mobile.csr \
+  -CA localCA.crt \
+  -CAkey localCA.key \
+  -CAcreateserial \
+  -out snipe-mobile.crt \
+  -days 825 \
+  -sha256 \
+  -extfile snipe-mobile.ext
+```
+
+Configure o `.env`:
+
+```env
+PORT=3010
+HTTPS=true
+SSL_CERT=/opt/certs/snipe-mobile/snipe-mobile.crt
+SSL_KEY=/opt/certs/snipe-mobile/snipe-mobile.key
+```
+
+Reinicie:
+
+```bash
+sudo systemctl restart snipe-it-mobile
+```
+
+Libere a porta:
+
+```bash
+sudo firewall-cmd --permanent --add-port=3010/tcp
+sudo firewall-cmd --reload
+```
+
+Instale `/opt/certs/snipe-mobile/localCA.crt` nos celulares como certificado de CA confiavel. Depois acesse:
+
+```text
+https://192.168.0.3:3010
+```
+
 ## 8. Primeiro acesso
 
 Login inicial:

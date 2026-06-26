@@ -1,4 +1,5 @@
-import { createServer } from 'node:http';
+import { createServer as createHttpServer } from 'node:http';
+import { createServer as createHttpsServer } from 'node:https';
 import nodemailer from 'nodemailer';
 import { readFile, writeFile, mkdir, access } from 'node:fs/promises';
 import { createReadStream, readFileSync } from 'node:fs';
@@ -14,6 +15,9 @@ const __dirname = dirname(__filename);
 loadDotEnv();
 
 const port = Number(process.env.PORT || 3010);
+const httpsEnabled = ['1', 'true', 'yes', 'on'].includes(String(process.env.HTTPS || '').toLowerCase());
+const sslCertPath = process.env.SSL_CERT || '';
+const sslKeyPath = process.env.SSL_KEY || '';
 const defaultSnipeUrl = 'https://equipamentos.censupeg.com.br';
 const publicDir = join(__dirname, 'public');
 const dataDir = join(__dirname, 'data');
@@ -58,7 +62,7 @@ await mkdir(uploadsDir, { recursive: true });
 await mkdir(termsDir, { recursive: true });
 await initStorage();
 
-const server = createServer((req, res) => {
+const requestHandler = (req, res) => {
   handleRequest(req, res).catch((error) => {
     console.error(error);
     if (!res.headersSent) {
@@ -67,11 +71,14 @@ const server = createServer((req, res) => {
       res.end();
     }
   });
-});
+};
+
+const server = createAppServer(requestHandler);
 
 async function handleRequest(req, res) {
   try {
-    const url = new URL(req.url || '/', `http://${req.headers.host}`);
+    const protocol = httpsEnabled || req.socket.encrypted ? 'https' : 'http';
+    const url = new URL(req.url || '/', `${protocol}://${req.headers.host}`);
 
     if (req.method === 'POST' && url.pathname === '/api/auth/login') {
       return handleLogin(req, res);
@@ -183,8 +190,20 @@ async function handleRequest(req, res) {
 }
 
 server.listen(port, () => {
-  console.log(`Snipe-IT Mobile aberto em http://localhost:${port}`);
+  const protocol = httpsEnabled ? 'https' : 'http';
+  console.log(`Snipe-IT Mobile aberto em ${protocol}://localhost:${port}`);
 });
+
+function createAppServer(handler) {
+  if (!httpsEnabled) return createHttpServer(handler);
+  if (!sslCertPath || !sslKeyPath) {
+    throw new Error('HTTPS=true exige SSL_CERT e SSL_KEY no .env.');
+  }
+  return createHttpsServer({
+    cert: readFileSync(sslCertPath),
+    key: readFileSync(sslKeyPath),
+  }, handler);
+}
 
 async function handleLogin(req, res) {
   const payload = await readJson(req);
