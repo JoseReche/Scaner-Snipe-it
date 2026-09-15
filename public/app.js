@@ -1,11 +1,15 @@
 const flows = {
   delivery: {
-    title: 'Entrega de material',
-    description: 'Registre a entrega para uma pessoa ou local.',
+    title: 'Entrega de ativo',
+    description: 'Registre a saida de um ativo para uma pessoa ou local.',
     needsAsset: true,
     needsDestination: true,
-    needsTerm: true,
-    termKey: 'delivery',
+  },
+  'inventory-delivery': {
+    title: 'Saida de toner e periferico',
+    description: 'Registre a saida de toner ou periferico para uma pessoa ou local.',
+    needsConsumable: true,
+    needsDestination: true,
   },
   loan: {
     title: 'Emprestimo com devolucao',
@@ -13,8 +17,6 @@ const flows = {
     needsAsset: true,
     needsDestination: true,
     needsReturnDate: true,
-    needsTerm: true,
-    termKey: 'delivery',
   },
   'asset-create': {
     title: 'Criacao de ativo',
@@ -31,8 +33,6 @@ const flows = {
     description: 'Baixe a devolucao de material e registre a conferencia.',
     needsAsset: true,
     needsAudit: true,
-    needsTerm: true,
-    termKey: 'return',
   },
 };
 
@@ -61,10 +61,6 @@ const returnDateWrap = $('#returnDateWrap');
 const auditLocationWrap = $('#auditLocationWrap');
 const nextAuditWrap = $('#nextAuditWrap');
 const locationNameWrap = $('#locationNameWrap');
-const termSection = $('#termSection');
-const termTitle = $('#termTitle');
-const termPreview = $('#termPreview');
-const signaturePad = $('#signaturePad');
 const photoInput = $('#photoInput');
 const photoPreview = $('#photoPreview');
 const historyList = $('#historyList');
@@ -75,16 +71,18 @@ const scannerMessage = $('#scannerMessage');
 const manualScanValue = $('#manualScanValue');
 const assetCurrentInfo = $('#assetCurrentInfo');
 const newInventoryFields = $('#newInventoryFields');
+const damagedPeripheralWrap = $('#damagedPeripheralWrap');
+const damagedPeripheralHelp = $('#damagedPeripheralHelp');
 
 let activeFlow = 'delivery';
 let photoData = '';
-let signatureDirty = false;
 let scannerStream = null;
 let scannerTimer = 0;
 let zxingControls = null;
 let scanTarget = 'asset';
 let me = null;
-let terms = { delivery: '', return: '' };
+let monthlyAssignmentsData = { month: '', rows: [], totalQuantity: 0 };
+let replenishmentData = [];
 let presets = {
   statusLabels: [],
   defaultCheckoutStatusId: 25,
@@ -102,10 +100,16 @@ $('#saveConfig').addEventListener('click', saveConfig);
 $('#testConnection').addEventListener('click', testConnection);
 $('#changePassword').addEventListener('click', changePassword);
 $('#refreshHistory').addEventListener('click', loadHistory);
-$('#clearSignature').addEventListener('click', clearSignature);
-$('#saveTerms').addEventListener('click', saveTerms);
 $('#createUser').addEventListener('click', createUser);
 $('#viewOverdueAdmin').addEventListener('click', showAdmin);
+$('#monthlyAssignmentsMonth').addEventListener('change', loadMonthlyAssignments);
+$('#exportMonthlyAssignments').addEventListener('click', exportMonthlyAssignments);
+$('#clearMonthlyAssignments').addEventListener('click', clearMonthlyAssignments);
+$('#refreshReplenishment').addEventListener('click', loadReplenishment);
+['Item', 'Recipient', 'CostCenter', 'Type'].forEach((name) => {
+  $(`#monthlyAssignments${name}Filter`).addEventListener('input', renderMonthlyAssignments);
+});
+$('#monthlyAssignmentsBody').addEventListener('change', updateMonthlyPurchase);
 $('#closeScanner').addEventListener('click', stopScanner);
 $('#applyManualScan').addEventListener('click', () => applyScannedValue(manualScanValue.value));
 document.querySelectorAll('[data-scan-target]').forEach((button) => {
@@ -144,7 +148,6 @@ form.addEventListener('submit', async (event) => {
     payload.createLocation = form.elements.createLocation.checked;
     payload.createInventoryItem = form.elements.createInventoryItem.checked;
     payload.photoData = photoData;
-    payload.signatureData = flows[activeFlow].needsTerm && signatureDirty ? signaturePad.toDataURL('image/png') : '';
 
     const response = await api('/api/events', {
       method: 'POST',
@@ -155,7 +158,6 @@ form.addEventListener('submit', async (event) => {
     form.elements.date.value = new Date().toISOString().slice(0, 10);
     photoData = '';
     photoPreview.classList.add('hidden');
-    clearSignature();
     setFlow(activeFlow);
     await loadHistory();
     alert(response.term ? 'Registro salvo e termo gerado.' : 'Registro salvo.');
@@ -191,7 +193,11 @@ form.elements.inventoryType.addEventListener('change', () => {
   $('#consumableSearch').value = '';
   form.elements.inventoryItemId.value = '';
   updateInventoryCreateMode();
+  updateDamagedPeripheralVisibility();
 });
+
+form.elements.damagedPeripheral.addEventListener('change', updateDamagedPeripheralVisibility);
+
 
 setupSearch({
   input: $('#destinationSearch'),
@@ -200,8 +206,6 @@ setupSearch({
   onSelect: (item) => {
     form.elements.destinationId.value = item.id || '';
     form.elements.destinationName.value = formatResultLabel(item);
-    form.elements.destinationEmail.value = item.email || '';
-    form.elements.signerName.value = formatResultLabel(item);
   },
 });
 
@@ -238,12 +242,9 @@ function setFlow(flow) {
   returnDateWrap.classList.toggle('hidden', !config.needsReturnDate);
   auditLocationWrap.classList.toggle('hidden', !config.needsAudit);
   nextAuditWrap.classList.toggle('hidden', !config.needsAudit);
-  termSection.classList.toggle('hidden', !config.needsTerm);
-  termTitle.textContent = config.termKey === 'return' ? 'Termo de devolucao' : 'Termo de entrega';
-  termPreview.textContent = terms[config.termKey] || '';
   assetCurrentInfo.classList.add('hidden');
   updateInventoryCreateMode();
-  clearSignature();
+  updateDamagedPeripheralVisibility();
 }
 
 function updateInventoryCreateMode() {
@@ -253,6 +254,15 @@ function updateInventoryCreateMode() {
   if (creating) {
     $('#consumableSearch').value = '';
     form.elements.inventoryItemId.value = '';
+  }
+}
+
+function updateDamagedPeripheralVisibility() {
+  const visible = activeFlow === 'inventory-delivery' && form.elements.inventoryType.value === 'accessories';
+  damagedPeripheralWrap.classList.toggle('hidden', !visible);
+  damagedPeripheralHelp.classList.toggle('hidden', !visible || !form.elements.damagedPeripheral.checked);
+  if (!visible) {
+    form.elements.damagedPeripheral.checked = false;
   }
 }
 
@@ -281,7 +291,7 @@ async function bootAuthenticated() {
   appView.classList.remove('hidden');
   topActions.classList.remove('hidden');
   $('#adminToggle').classList.toggle('hidden', me.role !== 'admin');
-  await Promise.all([loadPresets(), loadTerms(), loadStatus(), loadHistory(), loadOverdueAlert()]);
+  await Promise.all([loadPresets(), loadStatus(), loadHistory(), loadOverdueAlert()]);
   setFlow(activeFlow);
 }
 
@@ -306,12 +316,6 @@ async function loadPresets() {
   fillStatusSelect(form.elements.checkoutStatusId, presets.defaultCheckoutStatusId);
   fillStatusSelect(form.elements.checkinStatusId, presets.defaultCheckinStatusId);
   fillStatusSelect(form.elements.newAssetStatusId, presets.defaultCheckinStatusId);
-}
-
-async function loadTerms() {
-  terms = await api('/api/terms');
-  $('#deliveryTerm').value = terms.delivery || '';
-  $('#returnTerm').value = terms.return || '';
 }
 
 function fillStatusSelect(select, selectedId) {
@@ -396,7 +400,7 @@ async function loadOverdueAlert() {
 async function showAdmin() {
   appView.classList.add('hidden');
   adminView.classList.remove('hidden');
-  await Promise.all([loadAdminSummary(), loadUsers(), loadTerms()]);
+  await Promise.all([loadAdminSummary(), loadUsers(), loadReplenishment(), loadMonthlyAssignments()]);
 }
 
 function showApp() {
@@ -412,7 +416,6 @@ async function loadAdminSummary() {
     ['Erros', summary.errors],
     ['Atrasos', summary.overdueLoans],
     ['Usuarios', summary.users],
-    ['E-mails pendentes', summary.pendingEmails],
   ].map(([label, value]) => `<article><strong>${value}</strong><span>${label}</span></article>`).join('');
 
   $('#overdueList').innerHTML = summary.overdue?.length
@@ -423,6 +426,128 @@ async function loadAdminSummary() {
       </article>
     `).join('')}`
     : '<h3>Emprestimos atrasados</h3><p class="empty">Nenhum emprestimo atrasado.</p>';
+}
+
+async function loadMonthlyAssignments() {
+  const monthInput = $('#monthlyAssignmentsMonth');
+  if (!monthInput.value) monthInput.value = new Date().toISOString().slice(0, 7);
+  const data = await api(`/api/admin/monthly-assignments?month=${encodeURIComponent(monthInput.value)}`);
+  monthlyAssignmentsData = data;
+  renderMonthlyAssignments();
+}
+
+async function loadReplenishment() {
+  try {
+    const data = await api('/api/admin/replenishment');
+    replenishmentData = data.rows || [];
+    $('#replenishmentSummary').textContent = replenishmentData.length
+      ? `${replenishmentData.length} item(ns) abaixo do minimo configurado.`
+      : 'Nenhum item abaixo do minimo configurado no Snipe-IT.';
+    $('#replenishmentBody').innerHTML = replenishmentData.length
+      ? replenishmentData.map((row) => `<tr>
+          <td>${escapeHtml(row.item)}</td>
+          <td>${escapeHtml(row.type)}</td>
+          <td>${escapeHtml(row.quantity)}</td>
+          <td>${escapeHtml(row.minimum)}</td>
+          <td><strong>${escapeHtml(row.missing)}</strong></td>
+        </tr>`).join('')
+      : '<tr><td colspan="5" class="empty">Nenhum item precisa de reposicao.</td></tr>';
+  } catch (error) {
+    replenishmentData = [];
+    $('#replenishmentSummary').textContent = error.message;
+    $('#replenishmentBody').innerHTML = '<tr><td colspan="5" class="empty">Nao foi possivel consultar o estoque.</td></tr>';
+  }
+}
+
+function renderMonthlyAssignments() {
+  const rows = getFilteredMonthlyAssignments();
+  const quantity = rows.reduce((total, row) => total + Number(row.quantity || 0), 0);
+  $('#monthlyAssignmentsTotal').textContent = `${rows.length} lancamento(s) exibido(s) | ${quantity} item(ns)`;
+  $('#monthlyAssignmentsBody').innerHTML = rows.length
+    ? rows.map((row) => `<tr>
+        <td><input class="monthly-purchase-flag" type="checkbox" data-item="${escapeHtml(row.item || 'sem item')}" ${row.purchased ? 'checked' : ''} aria-label="Marcar ${escapeHtml(row.item || 'item')} como comprado"></td>
+        <td>${escapeHtml(row.date)}</td>
+        <td>${escapeHtml(row.operator)}</td>
+        <td>${escapeHtml(row.recipient)}</td>
+        <td>${escapeHtml(row.costCenter || '-')}</td>
+        <td>${escapeHtml(row.item || '-')}</td>
+        <td>${escapeHtml(row.inventoryType)}</td>
+        <td>${escapeHtml(row.quantity)}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="8" class="empty">Nenhuma saida encontrada com esses filtros.</td></tr>';
+}
+
+function getFilteredMonthlyAssignments() {
+  const itemFilter = $('#monthlyAssignmentsItemFilter').value.trim().toLocaleLowerCase();
+  const recipientFilter = $('#monthlyAssignmentsRecipientFilter').value.trim().toLocaleLowerCase();
+  const costCenterFilter = $('#monthlyAssignmentsCostCenterFilter').value.trim().toLocaleLowerCase();
+  const typeFilter = $('#monthlyAssignmentsTypeFilter').value;
+  return monthlyAssignmentsData.rows.filter((row) => (
+    (!itemFilter || String(row.item).toLocaleLowerCase().includes(itemFilter))
+    && (!recipientFilter || String(row.recipient).toLocaleLowerCase().includes(recipientFilter))
+    && (!costCenterFilter || String(row.costCenter).toLocaleLowerCase().includes(costCenterFilter))
+    && (!typeFilter || row.inventoryType === typeFilter)
+  ));
+}
+
+async function updateMonthlyPurchase(event) {
+  const checkbox = event.target.closest('.monthly-purchase-flag');
+  if (!checkbox) return;
+  try {
+    await api('/api/admin/monthly-assignment-purchase', {
+      method: 'POST',
+      body: JSON.stringify({
+        month: monthlyAssignmentsData.month,
+        item: checkbox.dataset.item,
+        purchased: checkbox.checked,
+      }),
+    });
+    monthlyAssignmentsData.rows.forEach((row) => {
+      if (row.item === checkbox.dataset.item) row.purchased = checkbox.checked;
+    });
+  } catch (error) {
+    checkbox.checked = !checkbox.checked;
+    $('#monthlyAssignmentsTotal').textContent = error.message;
+  }
+}
+
+function exportMonthlyAssignments() {
+  const headers = ['Data', 'Quem entregou', 'Para quem foi', 'CC', 'Quantidade', 'Item', 'Tipo'];
+  const values = getFilteredMonthlyAssignments().map((row) => [
+    row.date,
+    row.operator,
+    row.recipient,
+    row.costCenter || '',
+    row.quantity,
+    row.item || '',
+    row.inventoryType,
+  ]);
+  const csv = [headers, ...values]
+    .map((line) => line.map((value) => `"${String(value ?? '').replace(/"/g, '""')}"`).join(';'))
+    .join('\r\n');
+  const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = `itens-atribuidos-${monthlyAssignmentsData.month || 'mes'}.csv`;
+  link.click();
+  URL.revokeObjectURL(link.href);
+}
+
+async function clearMonthlyAssignments() {
+  const month = $('#monthlyAssignmentsMonth').value;
+  const count = monthlyAssignmentsData.rows.length;
+  if (!count) {
+    $('#monthlyAssignmentsTotal').textContent = 'Nao ha registros para limpar neste mes.';
+    return;
+  }
+  if (!window.confirm(`Limpar os ${count} lancamento(s) de ${month}? Esta acao nao pode ser desfeita.`)) return;
+  try {
+    const result = await api(`/api/admin/monthly-assignments?month=${encodeURIComponent(month)}`, { method: 'DELETE' });
+    await loadMonthlyAssignments();
+    $('#monthlyAssignmentsTotal').textContent = `${result.removed} lancamento(s) removido(s).`;
+  } catch (error) {
+    $('#monthlyAssignmentsTotal').textContent = error.message;
+  }
 }
 
 async function loadUsers() {
@@ -451,67 +576,6 @@ async function createUser() {
   } catch (error) {
     $('#adminMessage').textContent = error.message;
   }
-}
-
-async function saveTerms() {
-  terms = await api('/api/admin/terms', {
-    method: 'POST',
-    body: JSON.stringify({
-      delivery: $('#deliveryTerm').value,
-      return: $('#returnTerm').value,
-    }),
-  });
-  $('#adminMessage').textContent = 'Termos salvos.';
-  setFlow(activeFlow);
-}
-
-function setupSignaturePad() {
-  const ctx = signaturePad.getContext('2d');
-  ctx.lineWidth = 3;
-  ctx.lineCap = 'round';
-  ctx.strokeStyle = '#1f2933';
-  let drawing = false;
-
-  const point = (event) => {
-    const rect = signaturePad.getBoundingClientRect();
-    const touch = event.touches?.[0];
-    return {
-      x: ((touch?.clientX ?? event.clientX) - rect.left) * (signaturePad.width / rect.width),
-      y: ((touch?.clientY ?? event.clientY) - rect.top) * (signaturePad.height / rect.height),
-    };
-  };
-
-  const start = (event) => {
-    event.preventDefault();
-    drawing = true;
-    signatureDirty = true;
-    const p = point(event);
-    ctx.beginPath();
-    ctx.moveTo(p.x, p.y);
-  };
-  const move = (event) => {
-    if (!drawing) return;
-    event.preventDefault();
-    const p = point(event);
-    ctx.lineTo(p.x, p.y);
-    ctx.stroke();
-  };
-  const end = () => { drawing = false; };
-
-  signaturePad.addEventListener('mousedown', start);
-  signaturePad.addEventListener('mousemove', move);
-  window.addEventListener('mouseup', end);
-  signaturePad.addEventListener('touchstart', start, { passive: false });
-  signaturePad.addEventListener('touchmove', move, { passive: false });
-  signaturePad.addEventListener('touchend', end);
-}
-
-function clearSignature() {
-  const ctx = signaturePad.getContext('2d');
-  ctx.clearRect(0, 0, signaturePad.width, signaturePad.height);
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, 0, signaturePad.width, signaturePad.height);
-  signatureDirty = false;
 }
 
 function setupSearch({ input, results, getType, onSelect }) {
@@ -789,6 +853,4 @@ async function resizeImage(file) {
   return canvas.toDataURL('image/jpeg', 0.82);
 }
 
-setupSignaturePad();
-clearSignature();
 await loadMe();

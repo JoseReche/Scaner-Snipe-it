@@ -81,7 +81,8 @@
         </section>
 
         <nav class="flow-tabs" aria-label="Fluxos">
-          <button class="active" data-flow="delivery">Entrega</button>
+          <button class="active" data-flow="delivery">Entrega de ativo</button>
+          <button data-flow="inventory-delivery">Saida toner/periferico</button>
           <button data-flow="loan">Emprestimo</button>
           <button data-flow="asset-create">Criar ativo</button>
           <button data-flow="receiving">Recebimento</button>
@@ -90,8 +91,8 @@
 
         <form id="recordForm" class="panel">
           <section class="summary">
-            <h2 id="flowTitle">Entrega de material</h2>
-            <p id="flowDescription">Registre saida definitiva ou entrega para uma pessoa ou local.</p>
+            <h2 id="flowTitle">Entrega de ativo</h2>
+            <p id="flowDescription">Registre a saida de um ativo para uma pessoa ou local.</p>
           </section>
 
           <div id="assetFields" class="field-grid">
@@ -136,6 +137,11 @@
               Quantidade recebida
               <input name="quantity" type="number" min="1" value="1">
             </label>
+            <label id="damagedPeripheralWrap" class="checkline hidden">
+              <input type="checkbox" name="damagedPeripheral">
+              Substituição de item estragado pela pessoa
+            </label>
+            <p id="damagedPeripheralHelp" class="field-help hidden">Será criado ou atualizado um PDF nos arquivos deste acessório com o nome da pessoa.</p>
             <label class="checkline">
               <input type="checkbox" name="createInventoryItem">
               Criar novo toner/periferico se necessario
@@ -210,10 +216,6 @@
                 Nome para conferencia
                 <input name="destinationName" autocomplete="off" placeholder="Nome do receptor">
               </label>
-              <label class="wide">
-                E-mail do receptor
-                <input name="destinationEmail" type="email" autocomplete="off" placeholder="email vindo do Snipe-IT">
-              </label>
             </div>
             <label class="checkline">
               <input type="checkbox" name="createLocation">
@@ -261,19 +263,6 @@
             <textarea name="note" rows="4" placeholder="Estado do material, motivo, centro de custo ou observacoes."></textarea>
           </label>
 
-          <section id="termSection" class="term-box">
-            <div class="section-title">
-              <h2 id="termTitle">Termo de entrega</h2>
-              <button id="clearSignature" type="button">Limpar</button>
-            </div>
-            <div id="termPreview" class="term-preview"></div>
-            <label>
-              Nome de quem assinou
-              <input name="signerName" autocomplete="off" placeholder="Nome completo">
-            </label>
-            <canvas id="signaturePad" width="680" height="220"></canvas>
-          </section>
-
           <section class="camera">
             <div>
               <h3>Foto do material</h3>
@@ -310,6 +299,82 @@
 
         <section class="panel admin-section">
           <div class="section-title">
+            <h2>Itens que necessitam reposicao</h2>
+            <button id="refreshReplenishment" type="button">Atualizar</button>
+          </div>
+          <p id="replenishmentSummary" class="config-message"></p>
+          <div class="table-scroll">
+            <table class="assignments-table">
+              <thead>
+                <tr>
+                  <th>Item</th>
+                  <th>Tipo</th>
+                  <th>Quantidade</th>
+                  <th>Minimo no Snipe-IT</th>
+                  <th>Faltam</th>
+                </tr>
+              </thead>
+              <tbody id="replenishmentBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel admin-section">
+          <div class="section-title">
+            <h2>Itens atribuidos no mes</h2>
+            <label class="month-field">
+              Mes
+              <input id="monthlyAssignmentsMonth" type="month">
+            </label>
+          </div>
+          <div class="assignment-actions">
+            <button id="exportMonthlyAssignments" type="button">Exportar lista</button>
+            <button id="clearMonthlyAssignments" type="button" class="danger-button">Limpar mes</button>
+          </div>
+          <div class="assignment-filters">
+            <label>
+              Item
+              <input id="monthlyAssignmentsItemFilter" type="search" placeholder="Filtrar item">
+            </label>
+            <label>
+              Pessoa
+              <input id="monthlyAssignmentsRecipientFilter" type="search" placeholder="Filtrar pessoa">
+            </label>
+            <label>
+              Centro de custo
+              <input id="monthlyAssignmentsCostCenterFilter" type="search" placeholder="Filtrar CC">
+            </label>
+            <label>
+              Tipo
+              <select id="monthlyAssignmentsTypeFilter">
+                <option value="">Todos</option>
+                <option value="Periferico">Periferico</option>
+                <option value="Toner / consumivel">Toner / consumivel</option>
+              </select>
+            </label>
+          </div>
+          <p id="monthlyAssignmentsTotal" class="config-message"></p>
+          <div class="table-scroll">
+            <table class="assignments-table">
+              <thead>
+                <tr>
+                  <th>Comprado</th>
+                  <th>Data</th>
+                  <th>Quem entregou</th>
+                  <th>Para quem foi</th>
+                  <th>CC</th>
+                  <th>Item</th>
+                  <th>Tipo</th>
+                  <th>Qtd.</th>
+                </tr>
+              </thead>
+              <tbody id="monthlyAssignmentsBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel admin-section">
+          <div class="section-title">
             <h2>Usuarios</h2>
             <button id="createUser" type="button">Criar</button>
           </div>
@@ -335,26 +400,9 @@
             </label>
           </div>
           <div id="usersList" class="admin-list"></div>
-        </section>
-
-        <section class="panel admin-section">
-          <h2>Termos</h2>
-          <label>
-            Termo de entrega
-            <textarea id="deliveryTerm" rows="8"></textarea>
-          </label>
-          <label>
-            Termo de devolucao
-            <textarea id="returnTerm" rows="8"></textarea>
-          </label>
-          <button id="saveTerms" class="submit secondary" type="button">Salvar termos</button>
           <p id="adminMessage" class="config-message"></p>
         </section>
 
-        <section class="panel admin-section note-panel">
-          <h2>E-mail</h2>
-          <p>A configuracao SMTP fica somente no arquivo <code>.env</code>. Assim a senha de e-mail nao fica exposta no painel.</p>
-        </section>
       </section>
     </main>
 

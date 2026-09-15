@@ -1,6 +1,5 @@
 import { createServer as createHttpServer } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
-import nodemailer from 'nodemailer';
 import { readFile, writeFile, mkdir, access } from 'node:fs/promises';
 import { createReadStream, readFileSync } from 'node:fs';
 import { createHash, pbkdf2Sync, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
@@ -8,6 +7,8 @@ import { extname, join, normalize, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
 import mysql from 'mysql2/promise';
+import { google } from 'googleapis';
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -110,6 +111,26 @@ async function handleRequest(req, res) {
     if (req.method === 'GET' && url.pathname === '/api/admin/summary') {
       requireAdmin(user);
       return handleAdminSummary(res);
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/admin/monthly-assignments') {
+      requireAdmin(user);
+      return handleMonthlyAssignments(url, res);
+    }
+
+    if (req.method === 'DELETE' && url.pathname === '/api/admin/monthly-assignments') {
+      requireAdmin(user);
+      return handleClearMonthlyAssignments(url, res);
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/admin/monthly-assignment-purchase') {
+      requireAdmin(user);
+      return handleMonthlyAssignmentPurchase(req, res);
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/admin/replenishment') {
+      requireAdmin(user);
+      return handleReplenishment(res, user);
     }
 
     if (req.method === 'GET' && url.pathname === '/api/admin/users') {
@@ -261,18 +282,116 @@ async function handleAdminSummary(res) {
     acc[item.status] = (acc[item.status] || 0) + 1;
     return acc;
   }, {});
-  const pendingEmails = (settings.emailLog || []).filter((item) => item.status !== 'sent').length;
   const overdueLoans = getOverdueLoans(events);
   sendJson(res, 200, {
     totalEvents: events.length,
     synced: byStatus.synced || 0,
     errors: byStatus['sync-error'] || 0,
     users: users.length,
-    pendingEmails,
     overdueLoans: overdueLoans.length,
     overdue: overdueLoans.slice(0, 10),
     recent: events.slice(0, 8),
   });
+}
+
+async function handleMonthlyAssignments(url, res) {
+  const requestedMonth = String(url.searchParams.get('month') || '').trim();
+  const month = /^\d{4}-\d{2}$/.test(requestedMonth) ? requestedMonth : today().slice(0, 7);
+  const settings = await readSettings();
+  const purchased = settings.monthlyPurchases || {};
+  const rows = (await readEvents())
+    .filter((event) => event.flow === 'inventory-delivery')
+    .filter((event) => String(event.createdAt || '').slice(0, 7) === month)
+    .map((event) => ({
+      date: event.date || String(event.createdAt || '').slice(0, 10),
+      operator: event.operator?.name || event.operator?.username || '',
+      recipient: event.destinationName || event.destinationId || '',
+      costCenter: event.destinationCostCenter || event.costCenter || '',
+      quantity: Number(event.quantity || 1),
+      item: event.inventoryItemName || event.inventoryName || event.snipeIt?.item?.name || '',
+      inventoryType: event.inventoryType === 'accessories' ? 'Periferico' : 'Toner / consumivel',
+      status: event.status || 'local',
+    }))
+    .map((row) => {
+      const purchaseKey = `${month}|${String(row.item || 'sem item').trim().toLocaleLowerCase()}`;
+      return { ...row, purchaseKey, purchased: Boolean(purchased[purchaseKey]) };
+    });
+
+  sendJson(res, 200, {
+    month,
+    totalQuantity: rows.reduce((total, row) => total + row.quantity, 0),
+    rows,
+  });
+}
+
+async function handleMonthlyAssignmentPurchase(req, res) {
+  const payload = await readJson(req);
+  const month = String(payload.month || '').trim();
+  const item = String(payload.item || '').trim();
+  if (!/^\d{4}-\d{2}$/.test(month) || !item) throw publicError('Mes e item sao obrigatorios.', 400);
+
+  const settings = await readSettings();
+  settings.monthlyPurchases ||= {};
+  const key = `${month}|${item.toLocaleLowerCase()}`;
+  if (payload.purchased) settings.monthlyPurchases[key] = true;
+  else delete settings.monthlyPurchases[key];
+  await writeSettings(settings);
+  sendJson(res, 200, { month, item, purchased: Boolean(settings.monthlyPurchases[key]) });
+}
+
+async function handleReplenishment(res, user) {
+  if (!isSnipeConfigured(user)) return sendJson(res, 200, { rows: [], offline: true });
+
+  const [consumables, accessories] = await Promise.all([
+    fetchInventoryForReplenishment('consumables', user),
+    fetchInventoryForReplenishment('accessories', user),
+  ]);
+  const rows = [...consumables, ...accessories]
+    .map((item) => normalizeReplenishmentItem(item.item, item.type))
+    .filter((item) => item.minimum !== null && item.quantity < item.minimum);
+
+  sendJson(res, 200, { rows });
+}
+
+async function fetchInventoryForReplenishment(type, user) {
+  const path = inventoryEndpoint(type);
+  const data = await snipeFetch(`${path}?limit=500`, {}, user);
+  const rows = Array.isArray(data?.rows) ? data.rows : [];
+  return rows.map((item) => ({ item, type }));
+}
+
+function normalizeReplenishmentItem(item, type) {
+  const quantity = Number(item?.remaining ?? item?.remaining_qty ?? item?.qty ?? 0);
+  const minimumValue = item?.min_amt ?? item?.minimum_quantity ?? item?.min_quantity;
+  const minimum = minimumValue === null || minimumValue === undefined || minimumValue === ''
+    ? null
+    : Number(minimumValue);
+  return {
+    id: item?.id,
+    item: item?.name || `ID ${item?.id || ''}`,
+    type: type === 'accessories' ? 'Periferico' : 'Toner / consumivel',
+    quantity,
+    minimum: Number.isFinite(minimum) ? minimum : null,
+    missing: Number.isFinite(minimum) ? Math.max(minimum - quantity, 0) : 0,
+  };
+}
+
+async function handleClearMonthlyAssignments(url, res) {
+  const requestedMonth = String(url.searchParams.get('month') || '').trim();
+  const month = /^\d{4}-\d{2}$/.test(requestedMonth) ? requestedMonth : today().slice(0, 7);
+  const events = await readEvents();
+  const kept = events.filter((event) => !(
+    event.flow === 'inventory-delivery'
+    && String(event.createdAt || '').slice(0, 7) === month
+  ));
+  const removed = events.length - kept.length;
+  await writeEvents(kept);
+  const settings = await readSettings();
+  for (const key of Object.keys(settings.monthlyPurchases || {})) {
+    if (key.startsWith(`${month}|`)) delete settings.monthlyPurchases[key];
+  }
+  await writeSettings(settings);
+  sendJson(res, 200, { month, removed });
 }
 
 async function handleAdminUsers(res) {
@@ -344,11 +463,10 @@ async function handleEvent(req, res, user) {
   const events = await readEvents();
   events.unshift(event);
   await writeEvents(events);
-  if ((event.flow === 'delivery' || event.flow === 'loan' || event.flow === 'return-audit') && event.signatureData) {
-    event.term = await createSignedTerm(event);
-    await attachSignedTermIfNeeded(event, user);
+  if (event.flow === 'receiving') {
+    event.receipt = await createReceivingReceipt(event);
+    await attachReceivingReceiptIfNeeded(event, user);
     await writeEvents(events);
-    await sendTermEmail(event);
   }
   sendJson(res, 201, event);
 }
@@ -446,6 +564,55 @@ async function pushToSnipeIt(event, user) {
   }
 
   if (event.flow === 'delivery' || event.flow === 'loan') {
+    if (event.inventoryItemId || event.consumableId || event.createInventoryItem) {
+      const inventoryType = event.inventoryType || 'consumables';
+      const itemId = event.inventoryItemId || event.consumableId;
+      const endpoint = inventoryEndpoint(inventoryType);
+
+      if (event.createInventoryItem) {
+        const created = await snipeFetch(endpoint, {
+          method: 'POST',
+          body: buildInventoryCreateBody(event, note),
+        }, user);
+        actions.push({ type: `create-${inventoryType}`, response: created });
+        return {
+          ok: true,
+          inventoryType,
+          item: normalizeEntity(created?.payload || created, inventoryType),
+          actions,
+        };
+      }
+
+      if (inventoryType === 'consumables' && event.destinationType !== 'user') {
+        return {
+          ok: false,
+          message: 'Consumivel pode ser entregue para pessoa. Para local, use ativo ou periferico.',
+        };
+      }
+
+      const checkoutBody = inventoryType === 'accessories'
+        ? {
+            assigned_user: event.destinationType === 'user' ? event.destinationId : undefined,
+            assigned_location: event.destinationType === 'location' ? event.destinationId : undefined,
+            note,
+          }
+        : {
+            assigned_to: event.destinationId,
+            note,
+          };
+      const checkout = await snipeFetch(`${endpoint}/${itemId}/checkout`, {
+        method: 'POST',
+        body: checkoutBody,
+      }, user);
+      actions.push({ type: `checkout-${inventoryType}`, response: checkout });
+      return {
+        ok: true,
+        inventoryType,
+        item: normalizeEntity(checkout?.payload || checkout, inventoryType),
+        actions,
+      };
+    }
+
     asset = await resolveAsset(event, user);
     const checkout = await snipeFetch(`/api/v1/hardware/${asset.id}/checkout`, {
       method: 'POST',
@@ -462,6 +629,69 @@ async function pushToSnipeIt(event, user) {
     actions.push({ type: 'checkout', response: checkout });
     await attachPhotoIfNeeded(event, asset.id, actions, user);
     return { ok: true, asset, actions };
+  }
+
+  if (event.flow === 'inventory-delivery') {
+    const inventoryType = event.inventoryType || 'consumables';
+    const itemId = event.inventoryItemId || event.consumableId;
+    const endpoint = inventoryEndpoint(inventoryType);
+    const isDamagedPeripheral = event.damagedPeripheral === 'on' && inventoryType === 'accessories';
+
+    if (event.createInventoryItem) {
+      const created = await snipeFetch(endpoint, {
+        method: 'POST',
+        body: buildInventoryCreateBody(event, note),
+      }, user);
+      return {
+        ok: true,
+        inventoryType,
+        item: normalizeEntity(created?.payload || created, inventoryType),
+        actions: [{ type: `create-${inventoryType}`, response: created }],
+      };
+    }
+
+    if (!itemId) {
+      return { ok: false, message: 'Escolha o toner ou periferico para registrar a saida.' };
+    }
+
+    if (inventoryType === 'consumables' && event.destinationType !== 'user') {
+      return { ok: false, message: 'Toner deve ser entregue para uma pessoa.' };
+    }
+
+    const current = await snipeFetch(`${endpoint}/${itemId}`, {}, user);
+    const destinationInfo = await resolveDestinationInfo(event, user);
+    const checkoutBody = inventoryType === 'accessories'
+      ? {
+          assigned_user: event.destinationType === 'user' ? event.destinationId : undefined,
+          checkout_qty: Number(event.quantity || 1),
+          note,
+        }
+      : {
+          assigned_to: event.destinationId,
+          note,
+        };
+
+    const checkout = await snipeFetch(`${endpoint}/${itemId}/checkout`, {
+      method: 'POST',
+      body: checkoutBody,
+    }, user);
+
+    const itemForSheet = normalizeEntity(current?.payload || current, inventoryType);
+    event.inventoryItemName ||= itemForSheet.name || '';
+    event.destinationCostCenter = destinationInfo.costCenter || '';
+    if (isDamagedPeripheral) {
+      const damageReport = await attachDamageReportIfNeeded(event, current?.payload || current, itemId, user);
+      if (damageReport) actions.push({ type: 'attach-damage-report', response: damageReport });
+    }
+    const sheetResult = await appendPeripheralToSheet(event, user, itemForSheet, destinationInfo);
+    actions.push({ type: 'google-sheet', response: sheetResult });
+
+    return {
+      ok: true,
+      inventoryType,
+      item: itemForSheet,
+      actions: [...actions, { type: `checkout-${inventoryType}`, response: checkout }],
+    };
   }
 
   if (event.flow === 'return-audit') {
@@ -667,6 +897,33 @@ async function snipeUpload(path, fields = {}, user = null) {
   return data;
 }
 
+async function snipeBinary(path, user = null) {
+  const response = await fetch(`${getSnipeUrl(user)}${path}`, {
+    headers: {
+      Accept: 'application/octet-stream, application/pdf, */*',
+      Authorization: `Bearer ${getUserToken(user)}`,
+    },
+    redirect: 'manual',
+  });
+  if (!response.ok) throw publicError(`Nao foi possivel baixar o arquivo anterior (${response.status}).`, response.status);
+  return Buffer.from(await response.arrayBuffer());
+}
+
+async function snipeDelete(path, user = null) {
+  const response = await fetch(`${getSnipeUrl(user)}${path}`, {
+    method: 'DELETE',
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${getUserToken(user)}`,
+    },
+    redirect: 'manual',
+  });
+  const text = await response.text();
+  const data = parseJsonResponse(text);
+  if (!response.ok) throw publicError(formatSnipeError(data, response.status), response.status);
+  return data;
+}
+
 async function resolveAsset(event, user) {
   if (event.assetId) {
     return normalizeEntity(await snipeFetch(`/api/v1/hardware/${event.assetId}`, {}, user));
@@ -721,7 +978,7 @@ async function attachSignedTermIfNeeded(event, user) {
       'file[]': {
         buffer,
         filename: event.term.filename,
-        mimeType: 'text/html',
+        mimeType: 'application/pdf',
       },
       notes: buildSignedTermNote(event),
     }, user);
@@ -731,17 +988,345 @@ async function attachSignedTermIfNeeded(event, user) {
   }
 }
 
+async function attachReceivingReceiptIfNeeded(event, user) {
+  const inventoryId = event.snipeIt?.item?.id || event.inventoryItemId || event.consumableId || event.receipt?.itemId;
+  const receiptType = event.receipt?.itemType || event.inventoryType || 'consumables';
+  if (!inventoryId || !event.receipt?.filename || !isSnipeConfigured(user)) return;
+
+  const endpoint = receiptType === 'accessories' ? `/api/v1/accessories/${inventoryId}/files` : `/api/v1/consumables/${inventoryId}/files`;
+  const filePath = join(termsDir, event.receipt.filename);
+  const buffer = await readFile(filePath);
+  try {
+    const upload = await snipeUpload(endpoint, {
+      'file[]': {
+        buffer,
+        filename: event.receipt.filename,
+        mimeType: 'application/pdf',
+      },
+      notes: buildReceivingNote(event),
+    }, user);
+    event.receipt.snipeItFile = { ok: true, itemType: receiptType, itemId: inventoryId, response: upload };
+  } catch (error) {
+    event.receipt.snipeItFile = { ok: false, itemType: receiptType, itemId: inventoryId, error: error.message };
+  }
+}
+
+async function attachDamageReportIfNeeded(event, item, inventoryId, user) {
+  if (!inventoryId || !isSnipeConfigured(user)) return null;
+
+  let previousFile = null;
+  try {
+    previousFile = await findAccessoryDamagePdf(inventoryId, user);
+  } catch (error) {
+    console.error(`Nao foi possivel consultar o PDF anterior do acessorio: ${error.message}`);
+  }
+
+  const damagedPeople = await getDamagedPeople(event, inventoryId);
+  const pdf = previousFile?.buffer
+    ? await appendDamageReportPdf(previousFile.buffer, event, item)
+    : await buildDamageReportPdf(event, item, damagedPeople);
+  const filename = `${event.createdAt.replace(/[:.]/g, '-')}-${event.id}-item-estragado.pdf`;
+  const filePath = join(termsDir, filename);
+  await writeFile(filePath, pdf);
+
+  try {
+    const upload = await snipeUpload(`/api/v1/accessories/${inventoryId}/files`, {
+      'file[]': {
+        buffer: pdf,
+        filename,
+        mimeType: 'application/pdf',
+      },
+      notes: buildDamageReportNote(event, item),
+    }, user);
+    let deletedPrevious = false;
+    if (previousFile?.file?.id) {
+      try {
+        await snipeDelete(`/api/v1/accessories/${inventoryId}/files/${previousFile.file.id}/delete`, user);
+        deletedPrevious = true;
+      } catch (error) {
+        console.error(`PDF anterior nao foi removido: ${error.message}`);
+      }
+    }
+    event.damageReport = {
+      ok: true,
+      filename,
+      url: `/terms/${filename}`,
+      itemId: inventoryId,
+      replacedPrevious: Boolean(previousFile),
+      deletedPrevious,
+      response: upload,
+    };
+    return event.damageReport;
+  } catch (error) {
+    event.damageReport = {
+      ok: false,
+      filename,
+      url: `/terms/${filename}`,
+      itemId: inventoryId,
+      error: error.message,
+    };
+    return event.damageReport;
+  }
+}
+
+async function getDamagedPeople(event, inventoryId) {
+  const events = await readEvents();
+  const entries = events
+    .filter((item) => item.flow === 'inventory-delivery')
+    .filter((item) => item.inventoryType === 'accessories')
+    .filter((item) => item.damagedPeripheral === 'on')
+    .filter((item) => String(item.inventoryItemId || item.consumableId || '') === String(inventoryId))
+    .map((item) => ({
+      name: item.destinationName || item.destinationId || 'Nao informado',
+      date: formatDamageDateTime(item),
+    }));
+
+  entries.push({
+    name: event.destinationName || event.destinationId || 'Nao informado',
+    date: formatDamageDateTime(event),
+  });
+
+  const uniquePeople = new Map();
+  for (const entry of entries) {
+    uniquePeople.set(entry.name.trim().toLocaleLowerCase(), entry);
+  }
+  return [...uniquePeople.values()];
+}
+
+function formatDamageDateTime(event) {
+  const date = event.date || String(event.createdAt || '').slice(0, 10) || today();
+  if (!event.createdAt) return date;
+  const time = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Sao_Paulo',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(new Date(event.createdAt));
+  return `${date} ${time}`;
+}
+
+async function findAccessoryDamagePdf(inventoryId, user) {
+  const data = await snipeFetch(`/api/v1/accessories/${inventoryId}/files`, {}, user);
+  const files = Array.isArray(data?.rows) ? data.rows : Array.isArray(data) ? data : [];
+  const file = files.find((candidate) => /\.pdf$/i.test(candidate?.filename || candidate?.name || candidate?.file_name || ''));
+  if (!file?.id) return null;
+  const buffer = await snipeBinary(`/api/v1/accessories/${inventoryId}/files/${file.id}`, user);
+  return { file, buffer };
+}
+
+function buildDamageReportNote(event, item) {
+  return [
+    'Descarte registrado pelo Snipe-IT Mobile.',
+    `Item: ${item?.name || item?.payload?.name || event.inventoryItemName || event.inventoryName || 'Nao informado'}`,
+    `Pessoa que danificou o item: ${event.destinationName || event.destinationId || 'Nao informado'}`,
+    `Data: ${event.date || today()}`,
+    event.operator?.name ? `Registrado por: ${event.operator.name}` : null,
+    event.note ? `Observacao: ${event.note}` : null,
+  ].filter(Boolean).join('\n');
+}
+
+async function buildDamageReportPdf(event, item, damagedPeople = []) {
+  const pdf = await PDFDocument.create();
+  const people = damagedPeople.length ? damagedPeople : [{ name: 'Nao informado', date: today() }];
+  const page = pdf.addPage([595, 90 + people.length * 18]);
+  const fontRegular = await pdf.embedFont(StandardFonts.Helvetica);
+  const fontBold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const margin = 32;
+  let y = page.getHeight() - 34;
+
+  const drawLine = (text, options = {}) => {
+    const size = options.size || 11;
+    page.drawText(String(text || ''), {
+      x: margin,
+      y,
+      size,
+      font: options.bold ? fontBold : fontRegular,
+      color: rgb(0.12, 0.18, 0.24),
+      maxWidth: 531,
+      lineHeight: size + 3,
+    });
+    y -= options.step || size + 6;
+  };
+
+  drawLine('Descarte', { bold: true, size: 18, step: 30 });
+  for (const person of people) {
+    drawLine(`${person.name} - ${person.date}`, { size: 10.5, step: 18 });
+  }
+
+  return pdf.save();
+}
+
+async function appendDamageReportPdf(previousBuffer, event, item) {
+  const source = await PDFDocument.load(previousBuffer);
+  const pdf = await PDFDocument.create();
+  const sourcePages = source.getPages();
+
+  if (!sourcePages.length) {
+    return buildDamageReportPdf(event, item, []);
+  }
+
+  for (let index = 0; index < sourcePages.length; index += 1) {
+    const sourcePage = sourcePages[index];
+    const { width, height } = sourcePage.getSize();
+    const page = pdf.addPage([width, height + 18]);
+    const embeddedPage = await pdf.embedPage(sourcePage);
+    page.drawPage(embeddedPage, { x: 0, y: 18, width, height });
+
+    if (index === sourcePages.length - 1) {
+      const font = await pdf.embedFont(StandardFonts.Helvetica);
+      const name = event.destinationName || event.destinationId || 'Nao informado';
+      page.drawText(`${name} - ${formatDamageDateTime(event)}`, {
+        x: 32,
+        y: 4,
+        size: 10.5,
+        font,
+        color: rgb(0.12, 0.18, 0.24),
+        maxWidth: width - 64,
+      });
+    }
+  }
+
+  return pdf.save();
+}
+
+async function appendPeripheralToSheet(event, user, item, destinationInfo) {
+  if (!item || event.flow !== 'inventory-delivery' || event.inventoryType !== 'accessories') {
+    return { ok: false, skipped: true };
+  }
+  if (!shouldWriteGoogleSheet()) return { ok: false, configured: false };
+
+  const row = [
+    event.createdAt || new Date().toISOString(),
+    user?.name || user?.username || '',
+    Number(event.quantity || 1),
+    item.name || '',
+    formatMoney(getPeripheralValue(item)),
+    destinationInfo?.name || event.destinationName || '',
+    destinationInfo?.costCenter || '',
+  ];
+
+  try {
+    await appendSheetRow(row);
+    return { ok: true };
+  } catch (error) {
+    console.error(`Falha ao registrar saida na planilha Google: ${error.message}`);
+    return { ok: false, error: error.message };
+  }
+}
+
+function shouldWriteGoogleSheet() {
+  return Boolean(
+    process.env.GOOGLE_SHEETS_SPREADSHEET_ID &&
+    process.env.GOOGLE_SHEETS_TAB_NAME &&
+    (process.env.GOOGLE_SERVICE_ACCOUNT_JSON || process.env.GOOGLE_SERVICE_ACCOUNT_FILE)
+  );
+}
+
+function getPeripheralValue(item) {
+  const raw = item?.raw || item || {};
+  const candidates = [
+    raw.purchase_cost,
+    raw.cost,
+    raw.unit_price,
+    raw.price,
+    raw?.fields?.purchase_cost,
+    raw?.fields?.cost,
+  ];
+  const found = candidates.find((value) => value !== undefined && value !== null && String(value).trim() !== '');
+  return found ?? '';
+}
+
+function formatMoney(value) {
+  if (value === '' || value === null || value === undefined) return '';
+  const numeric = Number(String(value).replace(',', '.'));
+  if (Number.isNaN(numeric)) return String(value);
+  return numeric.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+async function appendSheetRow(values) {
+  const spreadsheetId = process.env.GOOGLE_SHEETS_SPREADSHEET_ID;
+  const sheetName = process.env.GOOGLE_SHEETS_TAB_NAME;
+  const auth = await getGoogleAuthClient();
+  const sheets = google.sheets({ version: 'v4', auth });
+  await sheets.spreadsheets.values.append({
+    spreadsheetId,
+    range: `${sheetName}!A:G`,
+    valueInputOption: 'USER_ENTERED',
+    insertDataOption: 'INSERT_ROWS',
+    requestBody: { values: [values] },
+  });
+}
+
+let googleAuthClient = null;
+async function getGoogleAuthClient() {
+  if (googleAuthClient) return googleAuthClient;
+  const raw = process.env.GOOGLE_SERVICE_ACCOUNT_FILE
+    ? await readFile(process.env.GOOGLE_SERVICE_ACCOUNT_FILE, 'utf8')
+    : process.env.GOOGLE_SERVICE_ACCOUNT_JSON || '';
+  const credentials = JSON.parse(raw);
+  googleAuthClient = new google.auth.JWT({
+    email: credentials.client_email,
+    key: String(credentials.private_key || '').replace(/\\n/g, '\n'),
+    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+  });
+  await googleAuthClient.authorize();
+  return googleAuthClient;
+}
+
+async function resolveDestinationInfo(event, user) {
+  if (event.destinationType !== 'user' || !event.destinationId || !isSnipeConfigured(user)) {
+    return {
+      name: event.destinationName || '',
+      costCenter: '',
+    };
+  }
+
+  try {
+    const info = await snipeFetch(`/api/v1/users/${encodeURIComponent(event.destinationId)}`, {}, user);
+    const userInfo = info?.payload || info || {};
+    return {
+      name: userInfo?.name || userInfo?.username || event.destinationName || '',
+      costCenter: extractCostCenter(userInfo),
+    };
+  } catch {
+    return {
+      name: event.destinationName || '',
+      costCenter: '',
+    };
+  }
+}
+
+function extractCostCenter(userInfo) {
+  const fields = userInfo?.custom_fields || userInfo?.customFields || {};
+  const candidates = [
+    userInfo?.department?.name,
+    userInfo?.department?.department,
+    userInfo?.department_name,
+    userInfo?.department,
+    fields?.cost_center?.value,
+    fields?.centro_de_custo?.value,
+    fields?.centro_custo?.value,
+    fields?.department?.value,
+  ];
+  const found = candidates.find((value) => value && String(value).trim());
+  return found ? String(found).trim() : '';
+}
+
 function validateEvent(event) {
   if ((event.flow === 'delivery' || event.flow === 'loan') && !event.destinationId) {
     throw publicError('Escolha uma pessoa ou local de destino.', 400);
   }
 
-  if ((event.flow === 'delivery' || event.flow === 'loan' || event.flow === 'return-audit') && !event.signatureData) {
-    throw publicError('Assinatura obrigatoria para gerar o termo.', 400);
-  }
-
   if (event.flow === 'loan' && !event.returnDate) {
     throw publicError('Informe a data prevista de devolucao.', 400);
+  }
+
+  if ((event.flow === 'delivery' || event.flow === 'loan') && !event.assetId) {
+    throw publicError('Escolha um ativo para registrar a saida.', 400);
+  }
+
+  if (event.flow === 'inventory-delivery' && !event.inventoryItemId && !event.consumableId && !event.createInventoryItem) {
+    throw publicError('Escolha um toner ou periferico para registrar a saida.', 400);
   }
 
   if (event.flow === 'receiving' && event.inventoryType && !['consumables', 'accessories'].includes(event.inventoryType)) {
@@ -807,6 +1392,7 @@ function buildNote(event) {
   const parts = [
     event.flowLabel || event.flow,
     event.note,
+    event.damagedPeripheral === 'on' ? 'Substituicao por periferico estragado.' : null,
     event.returnDate ? `Devolucao prevista: ${event.returnDate}` : null,
     event.photo?.url ? `Foto: ${event.photo.url}` : null,
   ].filter(Boolean);
@@ -827,6 +1413,15 @@ function buildSignedTermNote(event) {
     event.flowLabel || event.flow,
     event.signerName ? `Assinado por: ${event.signerName}` : null,
     event.destinationName ? `Receptor: ${event.destinationName}` : null,
+  ].filter(Boolean).join('\n');
+}
+
+function buildReceivingNote(event) {
+  return [
+    `Recebimento registrado pelo Snipe-IT Mobile no registro ${event.id}.`,
+    `Quantidade: ${event.restock?.receivedQty || event.quantity || 1}`,
+    event.note ? `Nota: ${event.note}` : null,
+    event.operator?.name ? `Operador: ${event.operator.name}` : null,
   ].filter(Boolean).join('\n');
 }
 
@@ -1043,7 +1638,6 @@ function defaultSettings() {
       delivery: 'Declaro que recebi o item {{asset}} em {{date}}, em bom estado de uso, e me responsabilizo pela guarda, zelo e devolucao quando solicitado.',
       return: 'Declaro que devolvi o item {{asset}} em {{date}}. A equipe de TI confirma o recebimento para conferencia e auditoria.',
     },
-    emailLog: [],
   };
 }
 
@@ -1229,9 +1823,9 @@ async function createSignedTerm(event) {
   const termType = event.flow === 'return-audit' ? 'return' : 'delivery';
   const template = settings.terms[termType] || '';
   const signature = await saveSignature(event.signatureData, event.createdAt);
-  const html = renderTermHtml(event, template, signature);
-  const filename = `${event.createdAt.replace(/[:.]/g, '-')}-${event.id}.html`;
-  await writeFile(join(termsDir, filename), html);
+  const pdf = await buildTermPdf(event, template, signature);
+  const filename = `${event.createdAt.replace(/[:.]/g, '-')}-${event.id}.pdf`;
+  await writeFile(join(termsDir, filename), pdf);
   return { type: termType, filename, url: `/terms/${filename}`, signature };
 }
 
@@ -1241,38 +1835,6 @@ async function saveSignature(dataUrl, createdAt) {
   const filename = `${createdAt.replace(/[:.]/g, '-')}-${randomUUID()}-assinatura.png`;
   await writeFile(join(uploadsDir, filename), Buffer.from(match[1], 'base64'));
   return { filename, url: `/uploads/${filename}` };
-}
-
-function renderTermHtml(event, template, signature) {
-  const assetLabel = termAssetLabel(event);
-  const allocation = termAllocationLabel(event);
-  const receiverLabel = event.destinationName || event.signerName || '';
-  const replacements = {
-    asset: assetLabel,
-    date: event.date || today(),
-    receiver: receiverLabel,
-    email: event.destinationEmail || '',
-    operator: event.operator?.name || event.operator?.username || '',
-    note: event.note || '',
-    allocation,
-  };
-  const termText = template.replace(/\{\{(\w+)\}\}/g, (_match, key) => replacements[key] || '');
-  return `<!doctype html>
-<html lang="pt-BR">
-<head><meta charset="utf-8"><title>Termo ${event.id}</title></head>
-<body style="font-family:Arial,sans-serif;line-height:1.45;color:#1f2933">
-<h1>${event.flow === 'return-audit' ? 'Termo de Devolucao' : 'Termo de Entrega'}</h1>
-<p><strong>Registro:</strong> ${event.id}</p>
-<p><strong>Data:</strong> ${event.date || today()}</p>
-<p><strong>Item:</strong> ${escapeHtmlText(assetLabel)}</p>
-${allocation ? `<p><strong>Alocacao atual:</strong> ${escapeHtmlText(allocation)}</p>` : ''}
-<p><strong>Receptor:</strong> ${escapeHtmlText(receiverLabel)} ${event.destinationEmail ? `&lt;${escapeHtmlText(event.destinationEmail)}&gt;` : ''}</p>
-<p><strong>Operador:</strong> ${event.operator?.name || event.operator?.username || ''}</p>
-<hr>
-<p>${escapeHtmlText(termText).replace(/\n/g, '<br>')}</p>
-<p><strong>Assinatura:</strong> ${escapeHtmlText(event.signerName || receiverLabel)}</p>
-<img alt="Assinatura" src="../uploads/${signature.filename}" style="max-width:520px;border:1px solid #ddd">
-</body></html>`;
 }
 
 function termAssetLabel(event) {
@@ -1287,68 +1849,179 @@ function termAllocationLabel(event) {
   return event.assetCurrentAssignee || event.assetCurrentLocation || event.resolvedAsset?.assignedTo || event.resolvedAsset?.location || '';
 }
 
-async function sendTermEmail(event) {
-  const settings = await readSettings();
-  const smtp = getSmtpConfig();
-  const to = event.destinationEmail;
-  const termPath = event.term?.filename ? join(termsDir, event.term.filename) : null;
-  const logEntry = {
-    id: randomUUID(),
-    eventId: event.id,
-    to,
-    subject: event.flow === 'return-audit' ? 'Termo de devolucao de equipamento' : 'Termo de entrega de equipamento',
-    termUrl: event.term?.url,
-    createdAt: new Date().toISOString(),
-    status: 'pending',
-    message: '',
+async function buildTermPdf(event, template, signature) {
+  const pdf = await PDFDocument.create();
+  const page = pdf.addPage([595, 842]);
+  const fontRegular = await pdf.embedFont(StandardFonts.Helvetica);
+  const fontBold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const width = page.getWidth();
+  const margin = 44;
+  let y = 792;
+
+  const drawLine = (text, options = {}) => {
+    const size = options.size || 11;
+    page.drawText(String(text || ''), {
+      x: options.x || margin,
+      y,
+      size,
+      font: options.bold ? fontBold : fontRegular,
+      color: options.color || rgb(0.12, 0.18, 0.24),
+      maxWidth: options.maxWidth || width - margin * 2,
+      lineHeight: options.lineHeight || size + 3,
+    });
+    y -= options.step || size + 8;
   };
 
-  if (!to) {
-    logEntry.status = 'missing-email';
-    logEntry.message = 'Receptor sem e-mail no registro.';
-  } else if (!smtp.host || !smtp.from) {
-    logEntry.status = 'smtp-not-configured';
-    logEntry.message = 'SMTP nao configurado no .env. Termo gerado, mas nao enviado.';
-  } else {
-    try {
-      const transporter = nodemailer.createTransport({
-        host: smtp.host,
-        port: smtp.port,
-        secure: smtp.secure,
-        auth: smtp.user ? { user: smtp.user, pass: smtp.pass || '' } : undefined,
-      });
-      await transporter.sendMail({
-        from: smtp.from,
-        to,
-        subject: logEntry.subject,
-        text: `Segue termo assinado referente ao registro ${event.id}.`,
-        html: `<p>Segue termo assinado referente ao registro <strong>${event.id}</strong>.</p>`,
-        attachments: termPath ? [{ filename: event.term.filename, path: termPath }] : [],
-      });
-      logEntry.status = 'sent';
-      logEntry.message = 'E-mail enviado.';
-    } catch (error) {
-      logEntry.status = 'send-error';
-      logEntry.message = error.message;
-    }
+  const assetLabel = termAssetLabel(event);
+  const allocation = termAllocationLabel(event);
+  const receiverLabel = event.destinationName || event.signerName || '';
+  const replacements = {
+    asset: assetLabel,
+    date: event.date || today(),
+    receiver: receiverLabel,
+    email: event.destinationEmail || '',
+    operator: event.operator?.name || event.operator?.username || '',
+    note: event.note || '',
+    allocation,
+  };
+  const termText = String(template || '').replace(/\{\{(\w+)\}\}/g, (_match, key) => replacements[key] || '');
+
+  drawLine(event.flow === 'return-audit' ? 'Termo de Devolucao' : 'Termo de Entrega', { bold: true, size: 18, step: 24 });
+  drawLine(`Registro: ${event.id}`);
+  drawLine(`Data: ${event.date || today()}`);
+  drawLine(`Item: ${assetLabel}`);
+  if (allocation) drawLine(`Alocacao atual: ${allocation}`);
+  drawLine(`Receptor: ${receiverLabel}${event.destinationEmail ? ` <${event.destinationEmail}>` : ''}`);
+  drawLine(`Operador: ${event.operator?.name || event.operator?.username || ''}`);
+  y -= 6;
+  page.drawLine({ start: { x: margin, y }, end: { x: width - margin, y }, thickness: 1, color: rgb(0.82, 0.84, 0.88) });
+  y -= 16;
+
+  for (const line of termText.split(/\r?\n/)) {
+    drawLine(line, { size: 10.5, step: 14 });
   }
 
-  settings.emailLog ||= [];
-  settings.emailLog.unshift(logEntry);
-  settings.emailLog = settings.emailLog.slice(0, 500);
-  await writeSettings(settings);
+  drawLine(`Assinatura: ${event.signerName || receiverLabel}`, { bold: true, size: 11, step: 14 });
+
+  const signatureImage = await embedImage(pdf, signature.filename);
+  if (signatureImage) {
+    const dims = signatureImage.scale(0.45);
+    page.drawImage(signatureImage, {
+      x: margin,
+      y: Math.max(48, y - dims.height - 4),
+      width: dims.width,
+      height: dims.height,
+    });
+  }
+
+  const photoImage = event.photo?.filename ? await embedImage(pdf, event.photo.filename) : null;
+  if (photoImage) {
+    const photoPage = pdf.addPage([595, 842]);
+    const photoFont = await pdf.embedFont(StandardFonts.HelveticaBold);
+    photoPage.drawText('Foto do material', {
+      x: 44,
+      y: 792,
+      size: 18,
+      font: photoFont,
+      color: rgb(0.12, 0.18, 0.24),
+    });
+    const maxWidth = 507;
+    const maxHeight = 690;
+    const scale = Math.min(maxWidth / photoImage.width, maxHeight / photoImage.height, 1);
+    const width = photoImage.width * scale;
+    const height = photoImage.height * scale;
+    photoPage.drawImage(photoImage, {
+      x: 44 + (maxWidth - width) / 2,
+      y: 70 + (maxHeight - height) / 2,
+      width,
+      height,
+    });
+  }
+
+  return pdf.save();
 }
 
-function getSmtpConfig() {
-  const portNumber = Number(process.env.SMTP_PORT || 587);
+async function createReceivingReceipt(event) {
+  const receipt = await buildReceivingPdf(event);
+  const filename = `${event.createdAt.replace(/[:.]/g, '-')}-${event.id}-recebimento.pdf`;
+  await writeFile(join(termsDir, filename), receipt);
   return {
-    host: process.env.SMTP_HOST || '',
-    port: portNumber,
-    secure: String(process.env.SMTP_SECURE || '').toLowerCase() === 'true' || portNumber === 465,
-    user: process.env.SMTP_USER || '',
-    pass: process.env.SMTP_PASS || '',
-    from: process.env.SMTP_FROM || '',
+    itemType: event.inventoryType || 'consumables',
+    itemId: event.snipeIt?.item?.id || event.inventoryItemId || event.consumableId || '',
+    filename,
+    url: `/terms/${filename}`,
   };
+}
+
+async function buildReceivingPdf(event) {
+  const pdf = await PDFDocument.create();
+  const page = pdf.addPage([595, 842]);
+  const fontRegular = await pdf.embedFont(StandardFonts.Helvetica);
+  const fontBold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const { width } = page.getSize();
+  const margin = 44;
+  let y = 792;
+
+  const drawLine = (text, opts = {}) => {
+    const size = opts.size || 11;
+    page.drawText(String(text || ''), {
+      x: opts.x || margin,
+      y,
+      size,
+      font: opts.bold ? fontBold : fontRegular,
+      color: opts.color || rgb(0.12, 0.18, 0.24),
+      maxWidth: opts.maxWidth || width - margin * 2,
+      lineHeight: opts.lineHeight || size + 3,
+    });
+    y -= opts.step || size + 8;
+  };
+
+  drawLine('Comprovante de Recebimento', { size: 18, bold: true, step: 26 });
+  drawLine(`Registro: ${event.id}`);
+  drawLine(`Data: ${event.date || today()}`);
+  drawLine(`Item: ${event.inventoryName || event.receipt?.itemId || event.inventoryItemId || event.consumableId || ''}`);
+  drawLine(`Tipo: ${event.inventoryType === 'accessories' ? 'Periferico' : 'Toner / consumivel'}`);
+  drawLine(`Quantidade: ${event.restock?.receivedQty || event.quantity || 1}`);
+  drawLine(`Operador: ${event.operator?.name || event.operator?.username || ''}`);
+  if (event.note) drawLine(`Nota: ${event.note}`);
+  y -= 10;
+  page.drawLine({ start: { x: margin, y }, end: { x: width - margin, y }, thickness: 1, color: rgb(0.8, 0.83, 0.87) });
+  y -= 20;
+
+  const photoImage = event.photo?.filename ? await embedImage(pdf, event.photo.filename) : null;
+  if (photoImage) {
+    const photoPage = pdf.addPage([595, 842]);
+    const photoFont = await pdf.embedFont(StandardFonts.HelveticaBold);
+    photoPage.drawText('Foto do recebimento', {
+      x: 44,
+      y: 792,
+      size: 18,
+      font: photoFont,
+      color: rgb(0.12, 0.18, 0.24),
+    });
+    const maxWidth = 507;
+    const maxHeight = 690;
+    const scale = Math.min(maxWidth / photoImage.width, maxHeight / photoImage.height, 1);
+    const width = photoImage.width * scale;
+    const height = photoImage.height * scale;
+    photoPage.drawImage(photoImage, {
+      x: 44 + (maxWidth - width) / 2,
+      y: 70 + (maxHeight - height) / 2,
+      width,
+      height,
+    });
+  }
+
+  return pdf.save();
+}
+
+async function embedImage(pdf, filename) {
+  const filePath = join(uploadsDir, filename);
+  const buffer = await readFile(filePath);
+  const ext = extname(filename).toLowerCase();
+  if (ext === '.png') return pdf.embedPng(buffer);
+  if (ext === '.jpg' || ext === '.jpeg') return pdf.embedJpg(buffer);
+  return null;
 }
 
 function escapeHtmlText(value) {
