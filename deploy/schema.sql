@@ -2,12 +2,6 @@ CREATE DATABASE IF NOT EXISTS snipe_mobile
   CHARACTER SET utf8mb4
   COLLATE utf8mb4_unicode_ci;
 
-CREATE USER IF NOT EXISTS 'snipe_mobile'@'localhost'
-  IDENTIFIED BY 'troque_esta_senha';
-
-GRANT ALL PRIVILEGES ON snipe_mobile.* TO 'snipe_mobile'@'localhost';
-FLUSH PRIVILEGES;
-
 USE snipe_mobile;
 
 CREATE TABLE IF NOT EXISTS app_users (

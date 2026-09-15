@@ -28,11 +28,11 @@
         <h2>Entrar</h2>
         <label>
           Usuario
-          <input id="loginUsername" autocomplete="username" placeholder="root">
+          <input id="loginUsername" autocomplete="username">
         </label>
         <label>
           Senha
-          <input id="loginPassword" type="password" autocomplete="current-password" placeholder="admin">
+          <input id="loginPassword" type="password" autocomplete="current-password">
         </label>
         <button id="loginButton" class="submit" type="button">Entrar</button>
         <p id="loginMessage" class="config-message"></p>
@@ -74,7 +74,7 @@
           </label>
           <label>
             Nova senha
-            <input id="newPassword" type="password" autocomplete="new-password">
+            <input id="newPassword" type="password" autocomplete="new-password" minlength="12">
           </label>
           <button id="changePassword" class="submit secondary" type="button">Atualizar senha</button>
           <p id="passwordMessage" class="config-message"></p>
@@ -389,7 +389,7 @@
             </label>
             <label>
               Senha inicial
-              <input id="newUserPassword" type="password">
+              <input id="newUserPassword" type="password" minlength="12">
             </label>
             <label>
               Perfil

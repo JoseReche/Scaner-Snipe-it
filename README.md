@@ -54,14 +54,7 @@ npm start
 
 Abra `http://localhost:3010`.
 
-Login inicial:
-
-```text
-usuario: root
-senha: admin
-```
-
-Troque a senha no primeiro acesso. Para acessar pelo celular na mesma rede, use o IP do servidor, por exemplo `http://192.168.0.3:3010`.
+No primeiro inicio, defina `INITIAL_ADMIN_USERNAME`, `INITIAL_ADMIN_NAME` e `INITIAL_ADMIN_PASSWORD` no `.env`. A senha deve ter pelo menos 12 caracteres. Para acessar pelo celular na mesma rede, use o IP do servidor, por exemplo `http://192.168.0.3:3010`.
 
 ## Configurar o Snipe-IT
 
@@ -78,7 +71,7 @@ Cada usuario do aplicativo possui seu proprio token de API:
 O token tambem pode ser informado no `.env`:
 
 ```env
-SNIPEIT_URL=https://equipamentos.censupeg.com.br
+SNIPEIT_URL=https://seu-snipe-it
 SNIPEIT_TOKEN=seu_token_de_api
 ```
 
@@ -101,8 +94,8 @@ Os passos abaixo consideram o servidor `192.168.0.3` e a instalacao em `/opt/sni
 
 ```bash
 sudo dnf update -y
-sudo dnf install -y git nginx mariadb-server policycoreutils-python-utils openssl
-sudo systemctl enable --now mariadb nginx
+sudo dnf install -y git httpd mariadb-server policycoreutils-python-utils openssl
+sudo systemctl enable --now mariadb httpd
 ```
 
 Instale Node.js 20:
@@ -132,7 +125,7 @@ O arquivo cria o banco `snipe_mobile`, o usuario `snipe_mobile` e as tabelas `ap
 
 Altere a senha no `deploy/schema.sql` antes de executar ou altere a senha depois no MariaDB.
 
-### 3. phpMyAdmin
+### 3. phpMyAdmin em URL
 
 O phpMyAdmin e opcional e serve para administrar o banco visualmente. O aplicativo se conecta diretamente ao MariaDB.
 
@@ -141,10 +134,10 @@ Em instalacoes que usam EPEL/Remi:
 ```bash
 sudo dnf install -y epel-release
 sudo dnf install -y php php-fpm php-mysqli php-json php-mbstring php-zip phpmyadmin
-sudo systemctl enable --now php-fpm
+sudo systemctl enable --now php-fpm httpd
 ```
 
-Restrinja o acesso ao phpMyAdmin por firewall, VPN ou rede interna. Nao deixe essa tela exposta publicamente sem protecao.
+O phpMyAdmin ficara acessivel em `http://192.168.0.3/phpmyadmin`. Restrinja o acesso ao phpMyAdmin por firewall, VPN ou rede interna. Nao deixe essa tela exposta publicamente sem protecao.
 
 ### 4. Copiar e instalar o sistema
 
@@ -163,15 +156,18 @@ Configuracao recomendada do `.env`:
 
 ```env
 PORT=3010
-SNIPEIT_URL=https://equipamentos.censupeg.com.br
+SNIPEIT_URL=https://seu-snipe-it
 SNIPEIT_TOKEN=
+INITIAL_ADMIN_USERNAME=admin-ti
+INITIAL_ADMIN_NAME=Administrador TI
+INITIAL_ADMIN_PASSWORD=coloque_uma_senha_forte_com_12_caracteres
 
 DB_CLIENT=mysql
 DB_HOST=127.0.0.1
 DB_PORT=3306
 DB_NAME=snipe_mobile
 DB_USER=snipe_mobile
-DB_PASSWORD=troque_esta_senha
+DB_PASSWORD=
 DB_CONNECTION_LIMIT=10
 
 # Opcional: integracao com Google Sheets
@@ -203,49 +199,25 @@ Teste localmente no servidor:
 curl http://127.0.0.1:3010
 ```
 
-### 6. Publicar com Nginx
+### 6. Acesso ao aplicativo
 
-Crie `/etc/nginx/conf.d/snipe-it-mobile.conf`:
+O aplicativo Node.js fica acessivel diretamente na porta 3010:
 
-```nginx
-server {
-    listen 80;
-    server_name 192.168.0.3;
-
-    client_max_body_size 20M;
-
-    location / {
-        proxy_pass http://127.0.0.1:3010;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-}
+```text
+http://192.168.0.3:3010
 ```
 
-Valide e recarregue:
+Libere somente a porta necessaria na rede interna:
 
 ```bash
-sudo nginx -t
-sudo systemctl reload nginx
+sudo firewall-cmd --permanent --add-port=3010/tcp
 sudo firewall-cmd --permanent --add-service=http
 sudo firewall-cmd --reload
 ```
 
-O acesso ficara disponivel em `http://192.168.0.3`.
-
 ### 7. HTTPS para usar a camera
 
-Para producao, prefira um dominio com certificado valido:
-
-```bash
-sudo dnf install -y certbot python3-certbot-nginx
-sudo certbot --nginx -d mobile.seudominio.com.br
-```
-
-Para uma rede interna sem dominio publico, e possivel usar certificado local. Nesse caso, o certificado da autoridade local precisa ser instalado nos celulares. Depois de configurar HTTPS, abra o sistema usando `https://`.
+Para producao, configure `HTTPS=true`, `SSL_CERT` e `SSL_KEY` no `.env`. O Node.js serve HTTPS diretamente, sem Nginx. Para camera em celulares, use um certificado confiavel ou instale a CA interna nos aparelhos.
 
 ## Como usar
 
@@ -301,7 +273,7 @@ A quantidade e a foto ficam dentro de um PDF. Esse PDF e anexado aos `Arquivos` 
 
 ## Dashboard administrativo
 
-Entre com um usuario com perfil `admin` para acessar:
+Entre com um usuario com perfil `admin` definido no `.env` no primeiro inicio para acessar:
 
 - resumo de registros, sincronizacoes, erros e atrasos;
 - usuarios e seus tokens configurados;

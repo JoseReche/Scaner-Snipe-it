@@ -3,7 +3,7 @@ import { createServer as createHttpsServer } from 'node:https';
 import { readFile, writeFile, mkdir, access } from 'node:fs/promises';
 import { createReadStream, readFileSync } from 'node:fs';
 import { createHash, pbkdf2Sync, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
-import { extname, join, normalize, basename } from 'node:path';
+import { extname, join, normalize, basename, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
 import mysql from 'mysql2/promise';
@@ -29,6 +29,7 @@ const settingsFile = join(dataDir, 'settings.json');
 const termsDir = join(dataDir, 'terms');
 const envFile = join(__dirname, '.env');
 const sessions = new Map();
+const loginAttempts = new Map();
 const storageClient = String(process.env.DB_CLIENT || 'json').toLowerCase();
 let mysqlPool = null;
 const censupegStatusLabels = [
@@ -80,6 +81,7 @@ async function handleRequest(req, res) {
   try {
     const protocol = httpsEnabled || req.socket.encrypted ? 'https' : 'http';
     const url = new URL(req.url || '/', `${protocol}://${req.headers.host}`);
+    setSecurityHeaders(res, url);
 
     if (req.method === 'POST' && url.pathname === '/api/auth/login') {
       return handleLogin(req, res);
@@ -204,6 +206,9 @@ async function handleRequest(req, res) {
       return handleEvent(req, res, user);
     }
 
+    if (url.pathname.startsWith('/uploads/') || url.pathname.startsWith('/terms/')) {
+      await requireAuth(req);
+    }
     await serveStatic(url.pathname, res);
   } catch (error) {
     throw error;
@@ -227,6 +232,8 @@ function createAppServer(handler) {
 }
 
 async function handleLogin(req, res) {
+  const clientKey = getClientKey(req);
+  checkLoginRateLimit(clientKey);
   const payload = await readJson(req);
   const username = String(payload.username || '').trim().toLowerCase();
   const password = String(payload.password || '');
@@ -234,19 +241,21 @@ async function handleLogin(req, res) {
   const user = users.find((item) => item.username.toLowerCase() === username && item.active !== false);
 
   if (!user || !verifyPassword(password, user.passwordHash)) {
+    recordLoginFailure(clientKey);
     throw publicError('Usuario ou senha invalidos.', 401);
   }
 
+  loginAttempts.delete(clientKey);
   const sessionId = randomUUID();
   sessions.set(sessionId, { userId: user.id, createdAt: Date.now() });
-  res.setHeader('Set-Cookie', `sid=${sessionId}; Path=/; HttpOnly; SameSite=Lax; Max-Age=28800`);
+  res.setHeader('Set-Cookie', buildSessionCookie(sessionId, 28800));
   sendJson(res, 200, publicUser(user));
 }
 
 async function handleLogout(req, res) {
   const sessionId = getCookie(req, 'sid');
   if (sessionId) sessions.delete(sessionId);
-  res.setHeader('Set-Cookie', 'sid=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0');
+  res.setHeader('Set-Cookie', buildSessionCookie('', 0));
   sendJson(res, 200, { ok: true });
 }
 
@@ -256,13 +265,16 @@ async function handleChangePassword(req, res, user) {
     throw publicError('Senha atual incorreta.', 400);
   }
   const newPassword = String(payload.newPassword || '');
-  if (newPassword.length < 4) {
-    throw publicError('A nova senha deve ter pelo menos 4 caracteres.', 400);
+  if (newPassword.length < 12) {
+    throw publicError('A nova senha deve ter pelo menos 12 caracteres.', 400);
   }
   const users = await readUsers();
   const target = users.find((item) => item.id === user.id);
   target.passwordHash = hashPassword(newPassword);
   await writeUsers(users);
+  for (const [sessionId, session] of sessions) {
+    if (session.userId === user.id && sessionId !== getCookie(req, 'sid')) sessions.delete(sessionId);
+  }
   sendJson(res, 200, { ok: true });
 }
 
@@ -404,6 +416,7 @@ async function handleAdminCreateUser(req, res) {
   const username = String(payload.username || '').trim().toLowerCase();
   const password = String(payload.password || '').trim();
   if (!username || !password) throw publicError('Informe usuario e senha.', 400);
+  if (password.length < 12) throw publicError('A senha deve ter pelo menos 12 caracteres.', 400);
   const users = await readUsers();
   if (users.some((item) => item.username.toLowerCase() === username)) {
     throw publicError('Usuario ja existe.', 400);
@@ -1452,7 +1465,7 @@ async function serveStatic(pathname, res) {
   const root = requested.startsWith('/uploads/') || requested.startsWith('/terms/') ? __dirname : publicDir;
   const filePath = normalize(join(root, requested.replace(/^\/+/, '')));
 
-  if (!filePath.startsWith(root)) {
+  if (filePath !== root && !filePath.startsWith(`${root}${sep}`)) {
     return sendText(res, 403, 'Acesso negado.');
   }
 
@@ -1596,17 +1609,7 @@ async function migrateJsonUsersToMysql() {
   }
 
   if (!users.length) {
-    users = [{
-      id: randomUUID(),
-      username: 'root',
-      name: 'Administrador',
-      role: 'admin',
-      active: true,
-      snipeItUrl: defaultSnipeUrl,
-      snipeItToken: '',
-      passwordHash: hashPassword('admin'),
-      createdAt: new Date().toISOString(),
-    }];
+    users = [createInitialAdmin()];
   }
 
   await writeUsers(users);
@@ -1668,19 +1671,28 @@ async function ensureUsersFile() {
   try {
     await readFile(usersFile, 'utf8');
   } catch {
-    const root = {
-      id: randomUUID(),
-      username: 'root',
-      name: 'Administrador',
-      role: 'admin',
-      active: true,
-      snipeItUrl: defaultSnipeUrl,
-      snipeItToken: '',
-      passwordHash: hashPassword('admin'),
-      createdAt: new Date().toISOString(),
-    };
-    await writeUsers([root]);
+    await writeUsers([createInitialAdmin()]);
   }
+}
+
+function createInitialAdmin() {
+  const username = String(process.env.INITIAL_ADMIN_USERNAME || '').trim().toLowerCase();
+  const name = String(process.env.INITIAL_ADMIN_NAME || '').trim();
+  const password = String(process.env.INITIAL_ADMIN_PASSWORD || '');
+  if (!username || !name || password.length < 12) {
+    throw new Error('Configure INITIAL_ADMIN_USERNAME, INITIAL_ADMIN_NAME e INITIAL_ADMIN_PASSWORD (minimo 12 caracteres) no .env antes do primeiro inicio.');
+  }
+  return {
+    id: randomUUID(),
+    username,
+    name,
+    role: 'admin',
+    active: true,
+    snipeItUrl: process.env.SNIPEIT_URL || '',
+    snipeItToken: process.env.SNIPEIT_TOKEN || '',
+    passwordHash: hashPassword(password),
+    createdAt: new Date().toISOString(),
+  };
 }
 
 async function ensureSettingsFile() {
@@ -1775,6 +1787,11 @@ async function requireAuth(req) {
   const sessionId = getCookie(req, 'sid');
   const session = sessionId ? sessions.get(sessionId) : null;
   if (!session) throw publicError('Login necessario.', 401);
+  const sessionTtl = Number(process.env.SESSION_TTL_SECONDS || 28800) * 1000;
+  if (!Number.isFinite(sessionTtl) || Date.now() - session.createdAt > sessionTtl) {
+    sessions.delete(sessionId);
+    throw publicError('Sessao expirada. Entre novamente.', 401);
+  }
   const users = await readUsers();
   const user = users.find((item) => item.id === session.userId && item.active !== false);
   if (!user) throw publicError('Login necessario.', 401);
@@ -1809,6 +1826,41 @@ function verifyPassword(password, stored) {
   const candidate = pbkdf2Sync(password, salt, 120000, 32, 'sha256');
   const expected = Buffer.from(hash, 'hex');
   return expected.length === candidate.length && timingSafeEqual(candidate, expected);
+}
+
+function setSecurityHeaders(res, url) {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'same-origin');
+  res.setHeader('Permissions-Policy', 'camera=(self)');
+  res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'");
+  if (url.pathname.startsWith('/api/')) res.setHeader('Cache-Control', 'no-store');
+  if (httpsEnabled) res.setHeader('Strict-Transport-Security', 'max-age=31536000');
+}
+
+function buildSessionCookie(sessionId, maxAge) {
+  const secure = httpsEnabled ? '; Secure' : '';
+  return `sid=${encodeURIComponent(sessionId)}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${secure}`;
+}
+
+function getClientKey(req) {
+  return req.socket.remoteAddress || 'unknown';
+}
+
+function checkLoginRateLimit(clientKey) {
+  const now = Date.now();
+  const entry = loginAttempts.get(clientKey);
+  if (!entry || now - entry.startedAt > 15 * 60 * 1000) {
+    loginAttempts.set(clientKey, { startedAt: now, failures: 0 });
+    return;
+  }
+  if (entry.failures >= 8) throw publicError('Muitas tentativas. Aguarde alguns minutos.', 429);
+}
+
+function recordLoginFailure(clientKey) {
+  const entry = loginAttempts.get(clientKey) || { startedAt: Date.now(), failures: 0 };
+  entry.failures += 1;
+  loginAttempts.set(clientKey, entry);
 }
 
 function getCookie(req, name) {
