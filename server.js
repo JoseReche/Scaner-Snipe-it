@@ -633,12 +633,17 @@ async function handleSnipePrinters(res, user) {
   const category = await snipeFetch(`/api/v1/categories/${categoryId}`, {}, user).catch(() => ({}));
   const categoryName = String(category?.name || category?.payload?.name || '').trim().toLowerCase();
   const filteredData = await snipeFetch(`/api/v1/hardware?limit=100&category_id=${categoryId}`, {}, user);
-  let rows = Array.isArray(filteredData?.rows) ? filteredData.rows : [];
+  const categoryRows = Array.isArray(filteredData?.rows) ? filteredData.rows : [];
+  const nameData = await snipeFetch('/api/v1/hardware?limit=100&search=CENSUI', {}, user).catch(() => ({}));
+  const censuiRows = (Array.isArray(nameData?.rows) ? nameData.rows : [])
+    .filter((item) => hardwareNameStartsWithCensui(item));
+  let rows = [...categoryRows, ...censuiRows];
   if (!rows.length) {
     const allData = await snipeFetch('/api/v1/hardware?limit=100', {}, user);
     const allRows = Array.isArray(allData?.rows) ? allData.rows : [];
-    rows = allRows.filter((item) => hardwareBelongsToCategory(item, categoryId, categoryName));
+    rows = allRows.filter((item) => hardwareBelongsToCategory(item, categoryId, categoryName) || hardwareNameStartsWithCensui(item));
   }
+  rows = [...new Map(rows.filter((item) => item?.id).map((item) => [String(item.id), item])).values()];
   const printers = await Promise.all(rows.map(async (item) => {
       const normalized = normalizeEntity(item, 'hardware');
       let detail = item;
@@ -672,6 +677,11 @@ function hardwareBelongsToCategory(item, categoryId, categoryName) {
   if (itemCategoryId !== undefined && String(itemCategoryId) === categoryId) return true;
   const itemCategoryName = String(category?.name || category || '').trim().toLowerCase();
   return Boolean(categoryName && itemCategoryName === categoryName);
+}
+
+function hardwareNameStartsWithCensui(item) {
+  const name = String(item?.name || item?.payload?.name || '').trim().toUpperCase();
+  return name.startsWith('CENSUI');
 }
 
 function normalizeHardwareAccessories(detail) {
