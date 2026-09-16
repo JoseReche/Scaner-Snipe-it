@@ -298,10 +298,10 @@
           <button id="backFromPrinters" type="button">Voltar para operacao</button>
         </div>
         <div class="printer-mode-actions">
-          <button id="showPrinterMap" type="button" class="active">Mapa de suprimentos</button>
-          <button id="showPrinterStatus" type="button">Status por IP</button>
+          <button id="showPrinterMap" type="button">Mapa de suprimentos</button>
+          <button id="showPrinterStatus" type="button" class="active">Consultar status pelo IP</button>
         </div>
-        <section class="printer-board">
+        <section class="printer-board hidden" id="printerMapPanel">
           <div class="printer-board-header">
             <div>
               <span class="printer-kicker">Painel de jogo</span>
@@ -342,7 +342,7 @@
             <span><i class="legend-dot legend-low"></i> Reposicao</span>
           </div>
         </section>
-        <section id="printerStatusPanel" class="printer-status-panel hidden">
+        <section id="printerStatusPanel" class="printer-status-panel">
           <div class="printer-status-search">
             <div>
               <span class="printer-kicker">Monitoramento de rede</span>

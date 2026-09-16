@@ -305,6 +305,7 @@ async function showPrinters() {
   printerSelector.innerHTML = availablePrinters.map((printer) => `<option value="${escapeHtml(printer.id)}">${escapeHtml(printer.name)}</option>`).join('');
   renderPrinterProfile();
   syncPrinterStatusIp();
+  setPrinterMode('status');
 }
 
 function syncPrinterStatusIp() {
@@ -334,12 +335,13 @@ async function queryPrinterStatus() {
 }
 
 function renderPrinterStatus(data) {
-  const alerts = data.alerts?.length
-    ? `<div class="printer-alert"><strong>Alerta atual</strong><span>${escapeHtml(data.alerts[0])}</span></div>`
+  const translatedAlerts = (data.alerts || []).map(translatePrinterText);
+  const alerts = translatedAlerts.length
+    ? `<div class="printer-alert"><strong>Alerta atual</strong>${translatedAlerts.map((alert) => `<span>${escapeHtml(alert)}</span>`).join('')}</div>`
     : '<div class="printer-alert"><strong>Status</strong><span>Nenhum alerta informado pela impressora.</span></div>';
   const toners = data.toners?.length
     ? data.toners.map((toner) => `<article class="printer-toner-card${toner.low ? ' low' : ''}">
-        <h5>${escapeHtml(toner.name)}</h5>
+        <h5>${escapeHtml(translatePrinterText(toner.name))}</h5>
         <div class="printer-toner-percent">${toner.percentage === null ? 'N/D' : `${escapeHtml(toner.percentage)}%`}</div>
       </article>`).join('')
     : '<p class="empty">A impressora respondeu, mas nao publicou niveis de toner no SNMP.</p>';
@@ -352,6 +354,33 @@ function renderPrinterStatus(data) {
     <div class="printer-toner-grid">${toners}</div>
     <p class="printer-status-footnote">Valores lidos via SNMP v2c em ${escapeHtml(data.source || 'SNMP')}.</p>`;
   printerStatusResult.classList.remove('hidden');
+}
+
+function translatePrinterText(value) {
+  let text = String(value || '');
+  const replacements = [
+    [/\bBlack Toner\b/gi, 'Toner preto'],
+    [/\bCyan Toner\b/gi, 'Toner ciano'],
+    [/\bMagenta Toner\b/gi, 'Toner magenta'],
+    [/\bYellow Toner\b/gi, 'Toner amarelo'],
+    [/\bDrum Cartridge\b/gi, 'Cartucho do cilindro'],
+    [/\bWaste Toner Container\b/gi, 'Coletor de toner'],
+    [/\bTransfer Belt Cleaner\b/gi, 'Limpador da correia de transferencia'],
+    [/\bSecond Bias Transfer Roll\b/gi, 'Rolo de transferencia secundario'],
+    [/\bFuser\b/gi, 'Fusor'],
+    [/\bTray\s+(\d+)\s+is empty\b/gi, 'A bandeja $1 esta sem papel'],
+    [/\bTray\s+(\d+)\b/gi, 'Bandeja $1'],
+    [/\bPaper\b/gi, 'papel'],
+    [/\bempty\b/gi, 'vazia'],
+    [/\bUser intervention is required\b/gi, 'E necessario adicionar papel'],
+    [/\bAdd paper to\b/gi, 'Adicione papel em'],
+    [/\bPrint and Copy services can continue\b/gi, 'Os servicos de impressao e copia podem continuar'],
+    [/\bif the correct paper is available in other trays\b/gi, 'se houver papel adequado em outras bandejas'],
+  ];
+  replacements.forEach(([pattern, replacement]) => {
+    text = text.replace(pattern, replacement);
+  });
+  return text;
 }
 
 function renderPrinterProfile() {

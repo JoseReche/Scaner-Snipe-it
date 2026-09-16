@@ -300,6 +300,10 @@ h1 {
   color: #5f3908;
 }
 
+.printer-alert span {
+  display: block;
+}
+
 .printer-toner-title {
   margin: 14px 0 8px;
   font-size: 15px;
