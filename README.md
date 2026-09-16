@@ -287,7 +287,7 @@ Entre com um usuario com perfil `admin` ou `superadmin` definido no `.env` no pr
 - exportacao da lista filtrada para CSV;
 - limpeza dos lancamentos do mes, mediante confirmacao.
 
-Somente `superadmin` pode criar ou excluir usuarios. `admin` pode usar o dashboard, mas nao possui acesso a gestao de usuarios. Qualquer usuario autenticado pode alterar a propria senha em `Minha conta`.
+Somente `superadmin` pode criar ou excluir usuarios, inclusive outros `superadmin`. `admin` pode usar o dashboard, mas nao possui acesso a gestao de usuarios. Qualquer usuario autenticado pode alterar a propria senha em `Minha conta`.
 
 ### Itens que necessitam reposicao
 

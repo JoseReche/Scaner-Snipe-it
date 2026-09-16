@@ -432,7 +432,7 @@ async function handleAdminCreateUser(req, res) {
     id: randomUUID(),
     username,
     name: String(payload.name || username).trim(),
-    role: payload.role === 'admin' ? 'admin' : 'operator',
+    role: ['operator', 'admin', 'superadmin'].includes(payload.role) ? payload.role : 'operator',
     active: true,
     snipeItUrl: defaultSnipeUrl,
     snipeItToken: '',
