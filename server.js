@@ -215,6 +215,21 @@ async function handleRequest(req, res) {
       return handlePrinterStatus(url, res, user);
     }
 
+    if (req.method === 'GET' && url.pathname === '/api/printers') {
+      return handlePrinters(res);
+    }
+
+    if (req.method === 'POST' && url.pathname === '/api/admin/printers') {
+      requireAdmin(user);
+      return handleAdminCreatePrinter(req, res);
+    }
+
+    const printerDeleteMatch = url.pathname.match(/^\/api\/admin\/printers\/([^/]+)$/);
+    if (req.method === 'DELETE' && printerDeleteMatch) {
+      requireAdmin(user);
+      return handleAdminDeletePrinter(res, decodeURIComponent(printerDeleteMatch[1]));
+    }
+
     if (req.method === 'POST' && url.pathname === '/api/events') {
       return handleEvent(req, res, user);
     }
@@ -597,6 +612,40 @@ async function handlePrinterStatus(url, res, user) {
   } catch (error) {
     throw publicError(`Nao foi possivel consultar a impressora: ${error.message}`, 502);
   }
+}
+
+async function handlePrinters(res) {
+  const settings = await readSettings();
+  sendJson(res, 200, settings.printers || []);
+}
+
+async function handleAdminCreatePrinter(req, res) {
+  const payload = await readJson(req);
+  const name = String(payload.name || '').trim();
+  const ip = String(payload.ip || '').trim();
+  const description = String(payload.description || '').trim();
+  if (!name || !ip) throw publicError('Informe o nome e o IP da impressora.', 400);
+  validatePrinterIp(ip);
+
+  const settings = await readSettings();
+  settings.printers ||= [];
+  if (settings.printers.some((printer) => printer.ip === ip)) {
+    throw publicError('Ja existe uma impressora com esse IP.', 400);
+  }
+  const printer = { id: randomUUID(), name, ip, description };
+  settings.printers.push(printer);
+  await writeSettings(settings);
+  sendJson(res, 201, printer);
+}
+
+async function handleAdminDeletePrinter(res, printerId) {
+  const settings = await readSettings();
+  const before = settings.printers || [];
+  const after = before.filter((printer) => String(printer.id) !== String(printerId));
+  if (after.length === before.length) throw publicError('Impressora nao encontrada.', 404);
+  settings.printers = after;
+  await writeSettings(settings);
+  sendJson(res, 200, { ok: true, deletedPrinterId: printerId });
 }
 
 async function readPrinterSnmpStatus(ip, community) {
@@ -1770,6 +1819,7 @@ async function migrateJsonEventsToMysql() {
 
 function defaultSettings() {
   return {
+    printers: [],
     terms: {
       delivery: 'Declaro que recebi o item {{asset}} em {{date}}, em bom estado de uso, e me responsabilizo pela guarda, zelo e devolucao quando solicitado.',
       return: 'Declaro que devolvi o item {{asset}} em {{date}}. A equipe de TI confirma o recebimento para conferencia e auditoria.',

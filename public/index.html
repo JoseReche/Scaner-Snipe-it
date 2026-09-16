@@ -479,6 +479,29 @@
           <p id="adminMessage" class="config-message"></p>
         </section>
 
+        <section id="printerManagementSection" class="panel admin-section">
+          <div class="section-title">
+            <h2>Impressoras fixas</h2>
+            <button id="createPrinter" type="button">Adicionar</button>
+          </div>
+          <div class="field-grid">
+            <label>
+              Nome
+              <input id="newPrinterName" autocomplete="off" placeholder="Xerox AltaLink C8070">
+            </label>
+            <label>
+              IP
+              <input id="newPrinterIp" inputmode="decimal" placeholder="192.168.1.220">
+            </label>
+            <label>
+              Descricao
+              <input id="newPrinterDescription" autocomplete="off" placeholder="Impressora da recepcao">
+            </label>
+          </div>
+          <div id="printersList" class="admin-list"></div>
+          <p id="printerAdminMessage" class="config-message"></p>
+        </section>
+
       </section>
     </main>
 

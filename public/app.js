@@ -113,6 +113,7 @@ const printerStatusMessage = $('#printerStatusMessage');
 const printerStatusResult = $('#printerStatusResult');
 
 let activeFlow = 'delivery';
+let availablePrinters = printerProfiles;
 let photoData = '';
 let scannerStream = null;
 let scannerTimer = 0;
@@ -139,10 +140,14 @@ $('#testConnection').addEventListener('click', testConnection);
 $('#changePassword').addEventListener('click', changePassword);
 $('#printersToggle').addEventListener('click', showPrinters);
 $('#backFromPrinters').addEventListener('click', showApp);
-printerSelector.addEventListener('change', renderPrinterProfile);
+printerSelector.addEventListener('change', () => {
+  renderPrinterProfile();
+  syncPrinterStatusIp();
+});
 $('#showPrinterMap').addEventListener('click', () => setPrinterMode('map'));
 $('#showPrinterStatus').addEventListener('click', () => setPrinterMode('status'));
 $('#queryPrinterStatus').addEventListener('click', queryPrinterStatus);
+$('#createPrinter').addEventListener('click', createPrinter);
 $('#passwordToggle').addEventListener('click', () => passwordPanel.classList.toggle('hidden'));
 $('#refreshHistory').addEventListener('click', loadHistory);
 $('#createUser').addEventListener('click', createUser);
@@ -292,12 +297,19 @@ function setFlow(flow) {
   updateDamagedPeripheralVisibility();
 }
 
-function showPrinters() {
+async function showPrinters() {
   appView.classList.add('hidden');
   adminView.classList.add('hidden');
   printerView.classList.remove('hidden');
-  printerSelector.innerHTML = printerProfiles.map((printer) => `<option value="${escapeHtml(printer.id)}">${escapeHtml(printer.name)}</option>`).join('');
+  await loadConfiguredPrinters();
+  printerSelector.innerHTML = availablePrinters.map((printer) => `<option value="${escapeHtml(printer.id)}">${escapeHtml(printer.name)}</option>`).join('');
   renderPrinterProfile();
+  syncPrinterStatusIp();
+}
+
+function syncPrinterStatusIp() {
+  const printer = availablePrinters.find((item) => item.id === printerSelector.value);
+  if (printer?.ip) printerIpInput.value = printer.ip;
 }
 
 function setPrinterMode(mode) {
@@ -343,7 +355,7 @@ function renderPrinterStatus(data) {
 }
 
 function renderPrinterProfile() {
-  const printer = printerProfiles.find((item) => item.id === printerSelector.value) || printerProfiles[0];
+  const printer = availablePrinters.find((item) => item.id === printerSelector.value) || availablePrinters[0];
   if (!printer) return;
   printerTitle.textContent = printer.name;
   printerDescription.textContent = printer.description;
@@ -361,6 +373,17 @@ function renderPrinterProfile() {
     </article>`).join('');
   printerItemsLeft.innerHTML = renderItems('left') || '<p class="empty">Nenhum item configurado.</p>';
   printerItemsRight.innerHTML = renderItems('right') || '<p class="empty">Nenhum item configurado.</p>';
+}
+
+async function loadConfiguredPrinters() {
+  try {
+    const rows = await api('/api/printers');
+    availablePrinters = rows.length
+      ? rows.map((printer) => ({ ...printer, asset: printer.ip, items: [] }))
+      : printerProfiles;
+  } catch {
+    availablePrinters = printerProfiles;
+  }
 }
 
 function updateInventoryCreateMode() {
@@ -522,6 +545,7 @@ async function showAdmin() {
   await Promise.all([
     loadAdminSummary(),
     me.role === 'superadmin' ? loadUsers() : Promise.resolve(),
+    loadPrintersAdmin(),
     loadReplenishment(),
     loadMonthlyAssignments(),
   ]);
@@ -685,6 +709,52 @@ async function loadUsers() {
     </article>
   `).join('');
 }
+
+async function loadPrintersAdmin() {
+  const printers = await api('/api/printers');
+  $('#printersList').innerHTML = printers.length
+    ? printers.map((printer) => `<article>
+        <strong>${escapeHtml(printer.name)}</strong>
+        <span>${escapeHtml(printer.ip)}${printer.description ? ` - ${escapeHtml(printer.description)}` : ''}</span>
+        <button type="button" class="danger-button printer-delete" data-printer-id="${escapeHtml(printer.id)}" data-printer-name="${escapeHtml(printer.name)}">Excluir</button>
+      </article>`).join('')
+    : '<p class="empty">Nenhuma impressora fixa cadastrada.</p>';
+}
+
+async function createPrinter() {
+  try {
+    await api('/api/admin/printers', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: $('#newPrinterName').value,
+        ip: $('#newPrinterIp').value,
+        description: $('#newPrinterDescription').value,
+      }),
+    });
+    $('#printerAdminMessage').textContent = 'Impressora adicionada.';
+    $('#newPrinterName').value = '';
+    $('#newPrinterIp').value = '';
+    $('#newPrinterDescription').value = '';
+    await loadPrintersAdmin();
+    await loadConfiguredPrinters();
+  } catch (error) {
+    $('#printerAdminMessage').textContent = error.message;
+  }
+}
+
+$('#printersList').addEventListener('click', async (event) => {
+  const button = event.target.closest('.printer-delete');
+  if (!button) return;
+  if (!window.confirm(`Excluir a impressora ${button.dataset.printerName || ''}?`)) return;
+  try {
+    await api(`/api/admin/printers/${encodeURIComponent(button.dataset.printerId)}`, { method: 'DELETE' });
+    $('#printerAdminMessage').textContent = 'Impressora excluida.';
+    await loadPrintersAdmin();
+    await loadConfiguredPrinters();
+  } catch (error) {
+    $('#printerAdminMessage').textContent = error.message;
+  }
+});
 
 $('#usersList').addEventListener('click', async (event) => {
   const button = event.target.closest('.user-delete');

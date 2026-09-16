@@ -193,7 +193,7 @@ h1 {
 .printer-status-panel {
   border: 1px solid var(--line);
   border-radius: 14px;
-  padding: 22px;
+  padding: 16px;
   background: #ffffff;
   box-shadow: 0 16px 30px rgba(31, 41, 51, 0.1);
 }
@@ -261,12 +261,12 @@ h1 {
   align-items: center;
   gap: 14px;
   border-bottom: 1px solid var(--line);
-  padding-bottom: 16px;
+  padding-bottom: 12px;
 }
 
 .printer-status-heading h4 {
   margin: 0 0 4px;
-  font-size: 20px;
+  font-size: 17px;
 }
 
 .printer-status-heading p {
@@ -277,19 +277,19 @@ h1 {
 .printer-status-icon {
   display: grid;
   place-items: center;
-  width: 74px;
-  height: 64px;
+  width: 58px;
+  height: 50px;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: #f7fafc;
   color: var(--brand);
-  font-size: 28px;
+  font-size: 22px;
 }
 
 .printer-alert {
-  margin: 16px 0;
+  margin: 12px 0;
   border-left: 4px solid var(--accent);
-  padding: 10px 12px;
+  padding: 8px 10px;
   background: #fff8eb;
   color: #7c4a08;
 }
@@ -301,19 +301,19 @@ h1 {
 }
 
 .printer-toner-title {
-  margin: 20px 0 10px;
-  font-size: 17px;
+  margin: 14px 0 8px;
+  font-size: 15px;
 }
 
 .printer-toner-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
 }
 
 .printer-toner-card {
   border-radius: 10px;
-  padding: 14px;
+  padding: 10px;
   background: #f7f8fa;
 }
 
@@ -323,8 +323,8 @@ h1 {
 }
 
 .printer-toner-card h5 {
-  margin: 0 0 8px;
-  font-size: 14px;
+  margin: 0 0 5px;
+  font-size: 12px;
 }
 
 .printer-toner-card h5::before {
@@ -344,7 +344,7 @@ h1 {
 
 .printer-toner-percent {
   color: var(--brand-strong);
-  font-size: 30px;
+  font-size: 25px;
   font-weight: 900;
 }
 
