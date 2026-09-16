@@ -629,24 +629,52 @@ async function handlePrinters(res) {
 
 async function handleSnipePrinters(res, user) {
   if (!isSnipeConfigured(user)) return sendJson(res, 200, []);
-  const data = await snipeFetch('/api/v1/hardware?limit=100', {}, user);
+  const data = await snipeFetch('/api/v1/hardware?limit=100&category_id=24', {}, user);
   const rows = Array.isArray(data?.rows) ? data.rows : [];
-  const printers = rows
-    .filter((item) => {
-      const searchable = [item?.name, item?.model?.name, item?.category?.name].filter(Boolean).join(' ').toLowerCase();
-      return /impressora|printer|xerox|laserjet|officejet|multifuncional|multifunction|altalink|workcentre/.test(searchable);
-    })
-    .map((item) => {
+  const printers = await Promise.all(rows.map(async (item) => {
       const normalized = normalizeEntity(item, 'hardware');
+      let detail = item;
+      try {
+        detail = await snipeFetch(`/api/v1/hardware/${encodeURIComponent(normalized.id)}`, {}, user);
+      } catch {
+        // A listagem ainda pode ser exibida mesmo quando um detalhe individual falhar.
+      }
+      const accessories = normalizeHardwareAccessories(detail);
       return {
         id: `snipe-${normalized.id}`,
         name: normalized.name,
         asset: normalized.assetTag || `Ativo #${normalized.id}`,
         description: [normalized.category, normalized.location].filter(Boolean).join(' - ') || 'Impressora cadastrada no Snipe-IT',
-        items: [],
+        items: accessories.map((accessory, index) => ({
+          name: accessory.name,
+          detail: accessory.detail,
+          quantity: accessory.quantity,
+          side: index % 2 === 0 ? 'left' : 'right',
+          direction: 'Suprimento',
+          low: false,
+        })),
       };
-    });
+    }));
   sendJson(res, 200, printers);
+}
+
+function normalizeHardwareAccessories(detail) {
+  const source = detail?.accessories || detail?.payload?.accessories || detail?.assigned_accessories || detail?.payload?.assigned_accessories || detail?.accessory || [];
+  const rows = Array.isArray(source)
+    ? source
+    : Array.isArray(source?.rows)
+      ? source.rows
+      : Array.isArray(source?.data)
+        ? source.data
+        : [];
+  return rows.map((item) => {
+    const quantity = item?.qty ?? item?.quantity ?? item?.remaining ?? item?.available ?? null;
+    return {
+      name: item?.name || item?.accessory?.name || 'Acessorio',
+      detail: item?.category?.name || item?.model?.name || item?.accessory?.category?.name || 'Item vinculado ao ativo',
+      quantity: quantity === null ? 'Quantidade nao informada' : `${quantity} disponivel`,
+    };
+  });
 }
 
 async function handleAdminCreatePrinter(req, res) {
