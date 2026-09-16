@@ -36,31 +36,6 @@ const flows = {
   },
 };
 
-const printerProfiles = [
-  {
-    id: 'impressora-ti-01',
-    name: 'Impressora TI 01',
-    asset: 'Perfil configuravel',
-    description: 'Mapa dos toners e perifericos utilizados nesta impressora.',
-    items: [
-      { name: 'Toner preto', detail: 'Cartucho principal', quantity: '2 em estoque', side: 'left', direction: 'Entrada', low: false },
-      { name: 'Toner colorido', detail: 'Kit de cores', quantity: '1 em estoque', side: 'left', direction: 'Entrada', low: true },
-      { name: 'Cabo de energia', detail: 'Conexao eletrica', quantity: 'Disponivel', side: 'right', direction: 'Saida', low: false },
-      { name: 'Bandeja de papel', detail: 'Papel A4', quantity: 'Reposicao', side: 'right', direction: 'Saida', low: true },
-    ],
-  },
-  {
-    id: 'impressora-recepcao',
-    name: 'Impressora Recepcao',
-    asset: 'Perfil configuravel',
-    description: 'Suprimentos ligados ao equipamento da recepcao.',
-    items: [
-      { name: 'Toner preto', detail: 'Cartucho principal', quantity: '3 em estoque', side: 'left', direction: 'Entrada', low: false },
-      { name: 'Papel A4', detail: 'Resma de papel', quantity: '4 resmas', side: 'right', direction: 'Saida', low: false },
-    ],
-  },
-];
-
 const $ = (selector) => document.querySelector(selector);
 const form = $('#recordForm');
 const tabs = document.querySelectorAll('[data-flow]');
@@ -114,7 +89,8 @@ const printerStatusMessage = $('#printerStatusMessage');
 const printerStatusResult = $('#printerStatusResult');
 
 let activeFlow = 'delivery';
-let availablePrinters = printerProfiles;
+let availablePrinters = [];
+let networkPrinters = [];
 let photoData = '';
 let scannerStream = null;
 let scannerTimer = 0;
@@ -303,8 +279,10 @@ async function showPrinters() {
   appView.classList.add('hidden');
   adminView.classList.add('hidden');
   printerView.classList.remove('hidden');
-  await loadConfiguredPrinters();
-  printerSelector.innerHTML = availablePrinters.map((printer) => `<option value="${escapeHtml(printer.id)}">${escapeHtml(printer.name)}</option>`).join('');
+  await Promise.all([loadSnipePrinters(), loadConfiguredPrinters()]);
+  printerSelector.innerHTML = availablePrinters.length
+    ? availablePrinters.map((printer) => `<option value="${escapeHtml(printer.id)}">${escapeHtml(printer.name)}</option>`).join('')
+    : '<option value="">Nenhuma impressora encontrada no Snipe-IT</option>';
   renderPrinterStatusOptions();
   renderPrinterProfile();
   syncPrinterStatusIp();
@@ -312,12 +290,11 @@ async function showPrinters() {
 }
 
 function syncPrinterStatusIp() {
-  const printer = availablePrinters.find((item) => item.id === printerStatusSelector.value);
+  const printer = networkPrinters.find((item) => item.id === printerStatusSelector.value);
   if (printer?.ip) printerIpInput.value = printer.ip;
 }
 
 function renderPrinterStatusOptions() {
-  const networkPrinters = availablePrinters.filter((printer) => printer.networkStatus !== false && printer.ip);
   printerStatusSelector.innerHTML = networkPrinters.length
     ? networkPrinters.map((printer) => `<option value="${escapeHtml(printer.id)}">${escapeHtml(printer.name)} - ${escapeHtml(printer.ip)}</option>`).join('')
     : '<option value="">Nenhuma impressora configurada para status por rede</option>';
@@ -418,11 +395,19 @@ function renderPrinterProfile() {
 async function loadConfiguredPrinters() {
   try {
     const rows = await api('/api/printers');
-    availablePrinters = rows.length
-      ? rows.map((printer) => ({ ...printer, asset: printer.ip, items: [] }))
-      : printerProfiles;
+    networkPrinters = rows
+      .filter((printer) => printer.networkStatus !== false && printer.ip)
+      .map((printer) => ({ ...printer, asset: printer.ip, items: [] }));
   } catch {
-    availablePrinters = printerProfiles;
+    networkPrinters = [];
+  }
+}
+
+async function loadSnipePrinters() {
+  try {
+    availablePrinters = await api('/api/snipe-printers');
+  } catch {
+    availablePrinters = [];
   }
 }
 

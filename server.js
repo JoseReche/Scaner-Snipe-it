@@ -219,6 +219,10 @@ async function handleRequest(req, res) {
       return handlePrinters(res);
     }
 
+    if (req.method === 'GET' && url.pathname === '/api/snipe-printers') {
+      return handleSnipePrinters(res, user);
+    }
+
     if (req.method === 'POST' && url.pathname === '/api/admin/printers') {
       requireAdmin(user);
       return handleAdminCreatePrinter(req, res);
@@ -621,6 +625,28 @@ async function handlePrinterStatus(url, res, user) {
 async function handlePrinters(res) {
   const settings = await readSettings();
   sendJson(res, 200, settings.printers || []);
+}
+
+async function handleSnipePrinters(res, user) {
+  if (!isSnipeConfigured(user)) return sendJson(res, 200, []);
+  const data = await snipeFetch('/api/v1/hardware?limit=100', {}, user);
+  const rows = Array.isArray(data?.rows) ? data.rows : [];
+  const printers = rows
+    .filter((item) => {
+      const searchable = [item?.name, item?.model?.name, item?.category?.name].filter(Boolean).join(' ').toLowerCase();
+      return /impressora|printer|xerox|laserjet|officejet|multifuncional|multifunction|altalink|workcentre/.test(searchable);
+    })
+    .map((item) => {
+      const normalized = normalizeEntity(item, 'hardware');
+      return {
+        id: `snipe-${normalized.id}`,
+        name: normalized.name,
+        asset: normalized.assetTag || `Ativo #${normalized.id}`,
+        description: [normalized.category, normalized.location].filter(Boolean).join(' - ') || 'Impressora cadastrada no Snipe-IT',
+        items: [],
+      };
+    });
+  sendJson(res, 200, printers);
 }
 
 async function handleAdminCreatePrinter(req, res) {
