@@ -611,11 +611,11 @@ async function readPrinterSnmpStatus(ip, community) {
       '1.3.6.1.2.1.1.5.0',
       '1.3.6.1.2.1.1.1.0',
     ]);
-    const descriptions = await snmpWalk(session, '1.3.6.1.2.1.25.3.2.1.3');
-    const levels = await snmpWalk(session, '1.3.6.1.2.1.43.11.1.1.7');
-    const maximums = await snmpWalk(session, '1.3.6.1.2.1.43.11.1.1.8');
-    const tonerNames = await snmpWalk(session, '1.3.6.1.2.1.43.11.1.1.6');
-    const alerts = await snmpWalk(session, '1.3.6.1.2.1.43.18.1.1.8');
+    const descriptions = await snmpWalkOptional(session, '1.3.6.1.2.1.25.3.2.1.3');
+    const levels = await snmpWalkOptional(session, '1.3.6.1.2.1.43.11.1.1.7');
+    const maximums = await snmpWalkOptional(session, '1.3.6.1.2.1.43.11.1.1.8');
+    const tonerNames = await snmpWalkOptional(session, '1.3.6.1.2.1.43.11.1.1.6');
+    const alerts = await snmpWalkOptional(session, '1.3.6.1.2.1.43.18.1.1.8');
     const toners = buildTonerLevels(levels, maximums, tonerNames);
     return {
       ip,
@@ -648,6 +648,14 @@ function snmpWalk(session, oid) {
       values.push(...varbinds.filter((item) => !snmp.isVarbindError(item)));
     }, (error) => error ? reject(error) : resolve(values));
   });
+}
+
+async function snmpWalkOptional(session, oid) {
+  try {
+    return await snmpWalk(session, oid);
+  } catch {
+    return [];
+  }
 }
 
 function buildTonerLevels(levels, maximums, tonerNames) {
