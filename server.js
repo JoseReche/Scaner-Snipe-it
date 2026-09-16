@@ -6,9 +6,11 @@ import { createHash, pbkdf2Sync, randomBytes, randomUUID, timingSafeEqual } from
 import { extname, join, normalize, basename, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
+import { isIP } from 'node:net';
 import mysql from 'mysql2/promise';
 import { google } from 'googleapis';
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import snmp from 'net-snmp';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -207,6 +209,10 @@ async function handleRequest(req, res) {
 
     if (req.method === 'GET' && url.pathname === '/api/asset-detail') {
       return handleAssetDetail(url, res, user);
+    }
+
+    if (req.method === 'GET' && url.pathname === '/api/printer-status') {
+      return handlePrinterStatus(url, res, user);
     }
 
     if (req.method === 'POST' && url.pathname === '/api/events') {
@@ -577,6 +583,104 @@ async function handleAssetDetail(url, res, user) {
     ? await snipeFetch(`/api/v1/hardware/${encodeURIComponent(id)}`, {}, user)
     : await snipeFetch(`/api/v1/hardware/bytag/${encodeURIComponent(tag)}`, {}, user);
   sendJson(res, 200, { asset: normalizeEntity(data) });
+}
+
+async function handlePrinterStatus(url, res, user) {
+  const ip = String(url.searchParams.get('ip') || '').trim();
+  validatePrinterIp(ip);
+  const community = String(process.env.PRINTER_SNMP_COMMUNITY || '').trim();
+  if (!community) throw publicError('Configure PRINTER_SNMP_COMMUNITY no .env.', 503);
+
+  try {
+    const status = await readPrinterSnmpStatus(ip, community);
+    sendJson(res, 200, status);
+  } catch (error) {
+    throw publicError(`Nao foi possivel consultar a impressora: ${error.message}`, 502);
+  }
+}
+
+async function readPrinterSnmpStatus(ip, community) {
+  const timeout = Number(process.env.PRINTER_SNMP_TIMEOUT || 3500);
+  const session = snmp.createSession(ip, community, {
+    version: snmp.Version2c,
+    timeout: Number.isFinite(timeout) ? timeout : 3500,
+    retries: 1,
+  });
+  try {
+    const system = await snmpGet(session, [
+      '1.3.6.1.2.1.1.5.0',
+      '1.3.6.1.2.1.1.1.0',
+    ]);
+    const descriptions = await snmpWalk(session, '1.3.6.1.2.1.25.3.2.1.3');
+    const levels = await snmpWalk(session, '1.3.6.1.2.1.43.11.1.1.7');
+    const maximums = await snmpWalk(session, '1.3.6.1.2.1.43.11.1.1.8');
+    const tonerNames = await snmpWalk(session, '1.3.6.1.2.1.43.11.1.1.6');
+    const alerts = await snmpWalk(session, '1.3.6.1.2.1.43.18.1.1.8');
+    const toners = buildTonerLevels(levels, maximums, tonerNames);
+    return {
+      ip,
+      reachable: true,
+      name: snmpText(system[0]?.value) || ip,
+      description: snmpText(system[1]?.value),
+      alerts: alerts.map((item) => snmpText(item.value)).filter(Boolean).slice(0, 8),
+      toners,
+      observedAt: new Date().toISOString(),
+      source: 'SNMP v2c',
+    };
+  } finally {
+    session.close();
+  }
+}
+
+function snmpGet(session, oids) {
+  return new Promise((resolve, reject) => {
+    session.get(oids, (error, varbinds) => {
+      if (error) return reject(error);
+      resolve(varbinds.filter((item) => !snmp.isVarbindError(item)));
+    });
+  });
+}
+
+function snmpWalk(session, oid) {
+  return new Promise((resolve, reject) => {
+    const values = [];
+    session.subtree(oid, (varbinds) => {
+      values.push(...varbinds.filter((item) => !snmp.isVarbindError(item)));
+    }, (error) => error ? reject(error) : resolve(values));
+  });
+}
+
+function buildTonerLevels(levels, maximums, tonerNames) {
+  const maxByIndex = new Map(maximums.map((item) => [snmpIndex(item.oid), Number(item.value)]));
+  const namesByIndex = new Map(tonerNames.map((item) => [snmpIndex(item.oid), snmpText(item.value)]));
+  return levels.map((item) => {
+    const index = snmpIndex(item.oid);
+    const level = Number(item.value);
+    const maximum = maxByIndex.get(index) || 0;
+    const percentage = maximum > 0 && level >= 0 ? Math.max(0, Math.min(100, Math.round((level / maximum) * 100))) : null;
+    const name = namesByIndex.get(index) || `Suprimento ${index}`;
+    return { name, level, maximum, percentage, low: percentage !== null && percentage <= 20 };
+  }).filter((item) => item.percentage !== null || item.level >= 0);
+}
+
+function snmpIndex(oid) {
+  const parts = String(oid).split('.');
+  return parts.slice(-2).join('.');
+}
+
+function snmpText(value) {
+  if (Buffer.isBuffer(value)) return value.toString('utf8').replace(/\0/g, '').trim();
+  return value === undefined || value === null ? '' : String(value).trim();
+}
+
+function validatePrinterIp(ip) {
+  if (isIP(ip) !== 4) throw publicError('Informe um IPv4 valido para a impressora.', 400);
+  const parts = ip.split('.').map(Number);
+  const isPrivate = parts[0] === 10
+    || (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31)
+    || (parts[0] === 192 && parts[1] === 168);
+  const allowPublic = String(process.env.ALLOW_PUBLIC_PRINTER_IPS || '').toLowerCase() === 'true';
+  if (!isPrivate && !allowPublic) throw publicError('Por seguranca, consulte apenas IPs privados da rede local.', 400);
 }
 
 async function pushToSnipeIt(event, user) {

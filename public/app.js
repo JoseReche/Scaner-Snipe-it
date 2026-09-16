@@ -106,6 +106,11 @@ const printerModel = $('#printerModel');
 const printerAsset = $('#printerAsset');
 const printerItemsLeft = $('#printerItemsLeft');
 const printerItemsRight = $('#printerItemsRight');
+const printerMapPanel = document.querySelector('.printer-board');
+const printerStatusPanel = $('#printerStatusPanel');
+const printerIpInput = $('#printerIpInput');
+const printerStatusMessage = $('#printerStatusMessage');
+const printerStatusResult = $('#printerStatusResult');
 
 let activeFlow = 'delivery';
 let photoData = '';
@@ -135,6 +140,9 @@ $('#changePassword').addEventListener('click', changePassword);
 $('#printersToggle').addEventListener('click', showPrinters);
 $('#backFromPrinters').addEventListener('click', showApp);
 printerSelector.addEventListener('change', renderPrinterProfile);
+$('#showPrinterMap').addEventListener('click', () => setPrinterMode('map'));
+$('#showPrinterStatus').addEventListener('click', () => setPrinterMode('status'));
+$('#queryPrinterStatus').addEventListener('click', queryPrinterStatus);
 $('#passwordToggle').addEventListener('click', () => passwordPanel.classList.toggle('hidden'));
 $('#refreshHistory').addEventListener('click', loadHistory);
 $('#createUser').addEventListener('click', createUser);
@@ -290,6 +298,48 @@ function showPrinters() {
   printerView.classList.remove('hidden');
   printerSelector.innerHTML = printerProfiles.map((printer) => `<option value="${escapeHtml(printer.id)}">${escapeHtml(printer.name)}</option>`).join('');
   renderPrinterProfile();
+}
+
+function setPrinterMode(mode) {
+  const mapMode = mode === 'map';
+  printerMapPanel.classList.toggle('hidden', !mapMode);
+  printerStatusPanel.classList.toggle('hidden', mapMode);
+  $('#showPrinterMap').classList.toggle('active', mapMode);
+  $('#showPrinterStatus').classList.toggle('active', !mapMode);
+}
+
+async function queryPrinterStatus() {
+  const ip = printerIpInput.value.trim();
+  printerStatusMessage.textContent = 'Consultando impressora...';
+  printerStatusResult.classList.add('hidden');
+  try {
+    const data = await api(`/api/printer-status?ip=${encodeURIComponent(ip)}`);
+    renderPrinterStatus(data);
+    printerStatusMessage.textContent = `Leitura concluida em ${new Date(data.observedAt).toLocaleString('pt-BR')}.`;
+  } catch (error) {
+    printerStatusMessage.textContent = error.message;
+  }
+}
+
+function renderPrinterStatus(data) {
+  const alerts = data.alerts?.length
+    ? `<div class="printer-alert"><strong>Alerta atual</strong><span>${escapeHtml(data.alerts[0])}</span></div>`
+    : '<div class="printer-alert"><strong>Status</strong><span>Nenhum alerta informado pela impressora.</span></div>';
+  const toners = data.toners?.length
+    ? data.toners.map((toner) => `<article class="printer-toner-card${toner.low ? ' low' : ''}">
+        <h5>${escapeHtml(toner.name)}</h5>
+        <div class="printer-toner-percent">${toner.percentage === null ? 'N/D' : `${escapeHtml(toner.percentage)}%`}</div>
+      </article>`).join('')
+    : '<p class="empty">A impressora respondeu, mas nao publicou niveis de toner no SNMP.</p>';
+  printerStatusResult.innerHTML = `<div class="printer-status-heading">
+      <div class="printer-status-icon" aria-hidden="true">▣</div>
+      <div><h4>${escapeHtml(data.name || data.ip)}</h4><p>${escapeHtml(data.ip)} · Painel acessivel</p></div>
+    </div>
+    ${alerts}
+    <h4 class="printer-toner-title">Niveis de toner</h4>
+    <div class="printer-toner-grid">${toners}</div>
+    <p class="printer-status-footnote">Valores lidos via SNMP v2c em ${escapeHtml(data.source || 'SNMP')}.</p>`;
+  printerStatusResult.classList.remove('hidden');
 }
 
 function renderPrinterProfile() {

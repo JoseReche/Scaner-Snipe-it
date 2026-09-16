@@ -20,6 +20,7 @@ Aplicacao web responsiva para registrar operacoes de estoque e ativos do Snipe-I
 - Lista mensal de itens atribuidos, filtros e exportacao CSV.
 - Marcacao persistente de itens que ja foram comprados.
 - Lista de itens abaixo do estoque minimo configurado no Snipe-IT.
+- Consulta de status de impressoras por IP usando SNMP.
 - Persistencia local em JSON ou em MySQL/MariaDB.
 
 ## Requisitos
@@ -223,6 +224,20 @@ sudo firewall-cmd --reload
 Para producao, configure `HTTPS=true`, `SSL_CERT` e `SSL_KEY` no `.env`. O Node.js serve HTTPS diretamente, sem Nginx. Para camera em celulares, use um certificado confiavel ou instale a CA interna nos aparelhos.
 
 ## Como usar
+
+### Status de impressora por IP
+
+Abra `Impressoras` e selecione `Status por IP`. Informe o IPv4 da impressora e clique em `Consultar`.
+
+O servidor consulta via SNMP v2c o nome do equipamento, alertas e niveis de toner publicados pela impressora. Configure a comunidade no `.env`:
+
+```env
+PRINTER_SNMP_COMMUNITY=valor_da_sua_rede
+PRINTER_SNMP_TIMEOUT=3500
+ALLOW_PUBLIC_PRINTER_IPS=false
+```
+
+Por seguranca, o sistema aceita somente IPs privados da rede local por padrao. Nao use a comunidade SNMP padrao `public` em producao. A impressora precisa permitir SNMP v2c a partir do servidor.
 
 ### Entrega de ativo
 

@@ -14,6 +14,7 @@
     "@zxing/library": "^0.22.0",
     "googleapis": "^176.0.0",
     "mysql2": "^3.22.5",
+    "net-snmp": "^3.29.1",
     "pdf-lib": "^1.17.1"
   }
 }
