@@ -1030,6 +1030,21 @@ textarea {
   font-weight: 800;
 }
 
+.printer-network-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.printer-network-toggle input,
+.checkbox-field input {
+  width: auto;
+}
+
 .admin-list {
   display: grid;
   gap: 8px;

@@ -108,6 +108,7 @@ const printerItemsLeft = $('#printerItemsLeft');
 const printerItemsRight = $('#printerItemsRight');
 const printerMapPanel = document.querySelector('.printer-board');
 const printerStatusPanel = $('#printerStatusPanel');
+const printerStatusSelector = $('#printerStatusSelector');
 const printerIpInput = $('#printerIpInput');
 const printerStatusMessage = $('#printerStatusMessage');
 const printerStatusResult = $('#printerStatusResult');
@@ -147,6 +148,7 @@ printerSelector.addEventListener('change', () => {
 $('#showPrinterMap').addEventListener('click', () => setPrinterMode('map'));
 $('#showPrinterStatus').addEventListener('click', () => setPrinterMode('status'));
 $('#queryPrinterStatus').addEventListener('click', queryPrinterStatus);
+printerStatusSelector.addEventListener('change', syncPrinterStatusIp);
 $('#createPrinter').addEventListener('click', createPrinter);
 $('#passwordToggle').addEventListener('click', () => passwordPanel.classList.toggle('hidden'));
 $('#refreshHistory').addEventListener('click', loadHistory);
@@ -303,14 +305,23 @@ async function showPrinters() {
   printerView.classList.remove('hidden');
   await loadConfiguredPrinters();
   printerSelector.innerHTML = availablePrinters.map((printer) => `<option value="${escapeHtml(printer.id)}">${escapeHtml(printer.name)}</option>`).join('');
+  renderPrinterStatusOptions();
   renderPrinterProfile();
   syncPrinterStatusIp();
   setPrinterMode('status');
 }
 
 function syncPrinterStatusIp() {
-  const printer = availablePrinters.find((item) => item.id === printerSelector.value);
+  const printer = availablePrinters.find((item) => item.id === printerStatusSelector.value);
   if (printer?.ip) printerIpInput.value = printer.ip;
+}
+
+function renderPrinterStatusOptions() {
+  const networkPrinters = availablePrinters.filter((printer) => printer.networkStatus !== false && printer.ip);
+  printerStatusSelector.innerHTML = networkPrinters.length
+    ? networkPrinters.map((printer) => `<option value="${escapeHtml(printer.id)}">${escapeHtml(printer.name)} - ${escapeHtml(printer.ip)}</option>`).join('')
+    : '<option value="">Nenhuma impressora configurada para status por rede</option>';
+  printerStatusSelector.disabled = !networkPrinters.length;
 }
 
 function setPrinterMode(mode) {
@@ -745,6 +756,7 @@ async function loadPrintersAdmin() {
     ? printers.map((printer) => `<article>
         <strong>${escapeHtml(printer.name)}</strong>
         <span>${escapeHtml(printer.ip)}${printer.description ? ` - ${escapeHtml(printer.description)}` : ''}</span>
+        <label class="printer-network-toggle"><input type="checkbox" class="printer-network-status" data-printer-id="${escapeHtml(printer.id)}" ${printer.networkStatus !== false ? 'checked' : ''}> Status por rede</label>
         <button type="button" class="danger-button printer-delete" data-printer-id="${escapeHtml(printer.id)}" data-printer-name="${escapeHtml(printer.name)}">Excluir</button>
       </article>`).join('')
     : '<p class="empty">Nenhuma impressora fixa cadastrada.</p>';
@@ -758,18 +770,37 @@ async function createPrinter() {
         name: $('#newPrinterName').value,
         ip: $('#newPrinterIp').value,
         description: $('#newPrinterDescription').value,
+        networkStatus: $('#newPrinterNetworkStatus').checked,
       }),
     });
     $('#printerAdminMessage').textContent = 'Impressora adicionada.';
     $('#newPrinterName').value = '';
     $('#newPrinterIp').value = '';
     $('#newPrinterDescription').value = '';
+    $('#newPrinterNetworkStatus').checked = false;
     await loadPrintersAdmin();
     await loadConfiguredPrinters();
   } catch (error) {
     $('#printerAdminMessage').textContent = error.message;
   }
 }
+
+$('#printersList').addEventListener('change', async (event) => {
+  const checkbox = event.target.closest('.printer-network-status');
+  if (!checkbox) return;
+  try {
+    await api(`/api/admin/printers/${encodeURIComponent(checkbox.dataset.printerId)}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ networkStatus: checkbox.checked }),
+    });
+    $('#printerAdminMessage').textContent = checkbox.checked
+      ? 'Status por rede ativado.'
+      : 'Status por rede desativado.';
+  } catch (error) {
+    checkbox.checked = !checkbox.checked;
+    $('#printerAdminMessage').textContent = error.message;
+  }
+});
 
 $('#printersList').addEventListener('click', async (event) => {
   const button = event.target.closest('.printer-delete');

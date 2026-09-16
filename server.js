@@ -225,6 +225,10 @@ async function handleRequest(req, res) {
     }
 
     const printerDeleteMatch = url.pathname.match(/^\/api\/admin\/printers\/([^/]+)$/);
+    if (req.method === 'PATCH' && printerDeleteMatch) {
+      requireAdmin(user);
+      return handleAdminUpdatePrinter(req, res, decodeURIComponent(printerDeleteMatch[1]));
+    }
     if (req.method === 'DELETE' && printerDeleteMatch) {
       requireAdmin(user);
       return handleAdminDeletePrinter(res, decodeURIComponent(printerDeleteMatch[1]));
@@ -632,10 +636,27 @@ async function handleAdminCreatePrinter(req, res) {
   if (settings.printers.some((printer) => printer.ip === ip)) {
     throw publicError('Ja existe uma impressora com esse IP.', 400);
   }
-  const printer = { id: randomUUID(), name, ip, description };
+  const printer = { id: randomUUID(), name, ip, description, networkStatus: Boolean(payload.networkStatus) };
   settings.printers.push(printer);
   await writeSettings(settings);
   sendJson(res, 201, printer);
+}
+
+async function handleAdminUpdatePrinter(req, res, printerId) {
+  const payload = await readJson(req);
+  const settings = await readSettings();
+  const printer = (settings.printers || []).find((item) => String(item.id) === String(printerId));
+  if (!printer) throw publicError('Impressora nao encontrada.', 404);
+  if (payload.name !== undefined) printer.name = String(payload.name || '').trim();
+  if (payload.ip !== undefined) {
+    printer.ip = String(payload.ip || '').trim();
+    validatePrinterIp(printer.ip);
+  }
+  if (payload.description !== undefined) printer.description = String(payload.description || '').trim();
+  if (payload.networkStatus !== undefined) printer.networkStatus = Boolean(payload.networkStatus);
+  if (!printer.name || !printer.ip) throw publicError('Informe o nome e o IP da impressora.', 400);
+  await writeSettings(settings);
+  sendJson(res, 200, printer);
 }
 
 async function handleAdminDeletePrinter(res, printerId) {

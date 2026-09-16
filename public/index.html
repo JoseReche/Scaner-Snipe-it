@@ -351,6 +351,10 @@
             </div>
             <div class="printer-ip-form">
               <label>
+                Impressora de rede
+                <select id="printerStatusSelector"></select>
+              </label>
+              <label>
                 IP da impressora
                 <input id="printerIpInput" inputmode="decimal" placeholder="192.168.1.220">
               </label>
@@ -496,6 +500,10 @@
             <label>
               Descricao
               <input id="newPrinterDescription" autocomplete="off" placeholder="Impressora da recepcao">
+            </label>
+            <label class="checkbox-field">
+              <input id="newPrinterNetworkStatus" type="checkbox">
+              Fornece status pela rede (SNMP)
             </label>
           </div>
           <div id="printersList" class="admin-list"></div>
