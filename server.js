@@ -14,6 +14,7 @@ import snmp from 'net-snmp';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
+const envFile = join(__dirname, '.env');
 
 loadDotEnv();
 
@@ -29,7 +30,6 @@ const eventsFile = join(dataDir, 'events.json');
 const usersFile = join(dataDir, 'users.json');
 const settingsFile = join(dataDir, 'settings.json');
 const termsDir = join(dataDir, 'terms');
-const envFile = join(__dirname, '.env');
 const sessions = new Map();
 const loginAttempts = new Map();
 const storageClient = String(process.env.DB_CLIENT || 'json').toLowerCase();
