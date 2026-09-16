@@ -20,6 +20,7 @@
         <button id="adminToggle" class="icon-button hidden" type="button">Admin</button>
         <button id="configToggle" class="icon-button" type="button">API</button>
         <button id="passwordToggle" class="icon-button" type="button">Minha conta</button>
+        <button id="printersToggle" class="icon-button" type="button">Impressoras</button>
         <button id="logoutButton" class="icon-button" type="button">Sair</button>
       </div>
     </header>
@@ -285,6 +286,57 @@
             <button id="refreshHistory" type="button">Atualizar</button>
           </div>
           <div id="historyList" class="history-list"></div>
+        </section>
+      </section>
+
+      <section id="printerView" class="hidden printer-view">
+        <div class="printer-topbar">
+          <div>
+            <p class="eyebrow">Mapa de suprimentos</p>
+            <h2>Impressoras</h2>
+          </div>
+          <button id="backFromPrinters" type="button">Voltar para operacao</button>
+        </div>
+        <section class="printer-board">
+          <div class="printer-board-header">
+            <div>
+              <span class="printer-kicker">Painel de jogo</span>
+              <h3 id="printerTitle">Selecione uma impressora</h3>
+              <p id="printerDescription">Veja os itens utilizados e o caminho de cada suprimento.</p>
+            </div>
+            <label class="printer-select-label">
+              Impressora
+              <select id="printerSelector"></select>
+            </label>
+          </div>
+          <div class="printer-map">
+            <div id="printerItemsLeft" class="printer-items printer-items-left"></div>
+            <div class="printer-core">
+              <div class="printer-photo-frame" aria-label="Ilustracao da impressora">
+                <svg class="printer-illustration" viewBox="0 0 360 250" role="img" aria-label="Impressora">
+                  <path class="printer-shadow" d="M70 211h222c9 0 16 7 16 15H54c0-8 7-15 16-15Z"/>
+                  <path class="printer-body" d="M72 85h216c20 0 36 16 36 36v70H36v-70c0-20 16-36 36-36Z"/>
+                  <path class="printer-top" d="M99 30h162l28 55H71l28-55Z"/>
+                  <path class="printer-screen" d="M89 109h62v38H89z"/>
+                  <circle class="printer-light" cx="254" cy="128" r="8"/>
+                  <path class="printer-slot" d="M83 171h194v33H83z"/>
+                  <path class="printer-paper" d="M116 30h128v38H116z"/>
+                  <path class="printer-paper-line" d="M136 45h88M136 55h59"/>
+                </svg>
+                <span class="printer-status-dot"></span>
+              </div>
+              <div class="printer-nameplate">
+                <span id="printerModel">Nenhum modelo selecionado</span>
+                <small id="printerAsset">Escolha uma impressora para iniciar</small>
+              </div>
+            </div>
+            <div id="printerItemsRight" class="printer-items printer-items-right"></div>
+          </div>
+          <div class="printer-legend">
+            <span><i class="legend-dot legend-entry"></i> Entrada</span>
+            <span><i class="legend-dot legend-output"></i> Saida</span>
+            <span><i class="legend-dot legend-low"></i> Reposicao</span>
+          </div>
         </section>
       </section>
 

@@ -36,12 +36,38 @@ const flows = {
   },
 };
 
+const printerProfiles = [
+  {
+    id: 'impressora-ti-01',
+    name: 'Impressora TI 01',
+    asset: 'Perfil configuravel',
+    description: 'Mapa dos toners e perifericos utilizados nesta impressora.',
+    items: [
+      { name: 'Toner preto', detail: 'Cartucho principal', quantity: '2 em estoque', side: 'left', direction: 'Entrada', low: false },
+      { name: 'Toner colorido', detail: 'Kit de cores', quantity: '1 em estoque', side: 'left', direction: 'Entrada', low: true },
+      { name: 'Cabo de energia', detail: 'Conexao eletrica', quantity: 'Disponivel', side: 'right', direction: 'Saida', low: false },
+      { name: 'Bandeja de papel', detail: 'Papel A4', quantity: 'Reposicao', side: 'right', direction: 'Saida', low: true },
+    ],
+  },
+  {
+    id: 'impressora-recepcao',
+    name: 'Impressora Recepcao',
+    asset: 'Perfil configuravel',
+    description: 'Suprimentos ligados ao equipamento da recepcao.',
+    items: [
+      { name: 'Toner preto', detail: 'Cartucho principal', quantity: '3 em estoque', side: 'left', direction: 'Entrada', low: false },
+      { name: 'Papel A4', detail: 'Resma de papel', quantity: '4 resmas', side: 'right', direction: 'Saida', low: false },
+    ],
+  },
+];
+
 const $ = (selector) => document.querySelector(selector);
 const form = $('#recordForm');
 const tabs = document.querySelectorAll('[data-flow]');
 const loginView = $('#loginView');
 const appView = $('#appView');
 const adminView = $('#adminView');
+const printerView = $('#printerView');
 const topActions = $('#topActions');
 const statusEl = $('#syncStatus');
 const configPanel = $('#configPanel');
@@ -73,6 +99,13 @@ const assetCurrentInfo = $('#assetCurrentInfo');
 const newInventoryFields = $('#newInventoryFields');
 const damagedPeripheralWrap = $('#damagedPeripheralWrap');
 const damagedPeripheralHelp = $('#damagedPeripheralHelp');
+const printerSelector = $('#printerSelector');
+const printerTitle = $('#printerTitle');
+const printerDescription = $('#printerDescription');
+const printerModel = $('#printerModel');
+const printerAsset = $('#printerAsset');
+const printerItemsLeft = $('#printerItemsLeft');
+const printerItemsRight = $('#printerItemsRight');
 
 let activeFlow = 'delivery';
 let photoData = '';
@@ -99,6 +132,9 @@ $('#backToApp').addEventListener('click', showApp);
 $('#saveConfig').addEventListener('click', saveConfig);
 $('#testConnection').addEventListener('click', testConnection);
 $('#changePassword').addEventListener('click', changePassword);
+$('#printersToggle').addEventListener('click', showPrinters);
+$('#backFromPrinters').addEventListener('click', showApp);
+printerSelector.addEventListener('change', renderPrinterProfile);
 $('#passwordToggle').addEventListener('click', () => passwordPanel.classList.toggle('hidden'));
 $('#refreshHistory').addEventListener('click', loadHistory);
 $('#createUser').addEventListener('click', createUser);
@@ -246,6 +282,35 @@ function setFlow(flow) {
   assetCurrentInfo.classList.add('hidden');
   updateInventoryCreateMode();
   updateDamagedPeripheralVisibility();
+}
+
+function showPrinters() {
+  appView.classList.add('hidden');
+  adminView.classList.add('hidden');
+  printerView.classList.remove('hidden');
+  printerSelector.innerHTML = printerProfiles.map((printer) => `<option value="${escapeHtml(printer.id)}">${escapeHtml(printer.name)}</option>`).join('');
+  renderPrinterProfile();
+}
+
+function renderPrinterProfile() {
+  const printer = printerProfiles.find((item) => item.id === printerSelector.value) || printerProfiles[0];
+  if (!printer) return;
+  printerTitle.textContent = printer.name;
+  printerDescription.textContent = printer.description;
+  printerModel.textContent = printer.name;
+  printerAsset.textContent = printer.asset;
+  const renderItems = (side) => printer.items
+    .filter((item) => item.side === side)
+    .map((item) => `<article class="printer-item${item.low ? ' low' : ''}">
+      <h4>${escapeHtml(item.name)}</h4>
+      <p>${escapeHtml(item.detail)}</p>
+      <div class="printer-item-meta">
+        <span class="printer-item-type">${escapeHtml(item.direction)}</span>
+        <span>${escapeHtml(item.quantity)}</span>
+      </div>
+    </article>`).join('');
+  printerItemsLeft.innerHTML = renderItems('left') || '<p class="empty">Nenhum item configurado.</p>';
+  printerItemsRight.innerHTML = renderItems('right') || '<p class="empty">Nenhum item configurado.</p>';
 }
 
 function updateInventoryCreateMode() {
@@ -402,6 +467,7 @@ async function loadOverdueAlert() {
 
 async function showAdmin() {
   appView.classList.add('hidden');
+  printerView.classList.add('hidden');
   adminView.classList.remove('hidden');
   await Promise.all([
     loadAdminSummary(),
@@ -413,6 +479,7 @@ async function showAdmin() {
 
 function showApp() {
   adminView.classList.add('hidden');
+  printerView.classList.add('hidden');
   appView.classList.remove('hidden');
 }
 
