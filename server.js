@@ -63,6 +63,7 @@ await mkdir(dataDir, { recursive: true });
 await mkdir(uploadsDir, { recursive: true });
 await mkdir(termsDir, { recursive: true });
 await initStorage();
+await ensureBootstrapSuperAdmin();
 
 const requestHandler = (req, res) => {
   handleRequest(req, res).catch((error) => {
@@ -141,8 +142,14 @@ async function handleRequest(req, res) {
     }
 
     if (req.method === 'POST' && url.pathname === '/api/admin/users') {
-      requireAdmin(user);
+      requireSuperAdmin(user);
       return handleAdminCreateUser(req, res);
+    }
+
+    const userDeleteMatch = url.pathname.match(/^\/api\/admin\/users\/([^/]+)$/);
+    if (req.method === 'DELETE' && userDeleteMatch) {
+      requireSuperAdmin(user);
+      return handleAdminDeleteUser(req, res, user, decodeURIComponent(userDeleteMatch[1]));
     }
 
     if (req.method === 'POST' && url.pathname === '/api/admin/terms') {
@@ -435,6 +442,20 @@ async function handleAdminCreateUser(req, res) {
   users.push(user);
   await writeUsers(users);
   sendJson(res, 201, publicUser(user));
+}
+
+async function handleAdminDeleteUser(req, res, currentUser, userId) {
+  if (String(currentUser.id) === String(userId)) {
+    throw publicError('O superadmin nao pode excluir a propria conta.', 400);
+  }
+  const users = await readUsers();
+  const target = users.find((item) => String(item.id) === String(userId));
+  if (!target) throw publicError('Usuario nao encontrado.', 404);
+  if (target.role === 'superadmin' && users.filter((item) => item.active !== false && item.role === 'superadmin').length <= 1) {
+    throw publicError('Nao e possivel excluir o ultimo superadmin.', 400);
+  }
+  await writeUsers(users.filter((item) => String(item.id) !== String(userId)));
+  sendJson(res, 200, { ok: true, deletedUserId: userId });
 }
 
 async function handleAdminTerms(req, res) {
@@ -1675,6 +1696,18 @@ async function ensureUsersFile() {
   }
 }
 
+async function ensureBootstrapSuperAdmin() {
+  if (process.env.INITIAL_ADMIN_ROLE === 'admin') return;
+  const username = String(process.env.INITIAL_ADMIN_USERNAME || '').trim().toLowerCase();
+  if (!username) return;
+  const users = await readUsers();
+  if (users.some((item) => item.active !== false && item.role === 'superadmin')) return;
+  const target = users.find((item) => item.username.toLowerCase() === username);
+  if (!target) return;
+  target.role = 'superadmin';
+  await writeUsers(users);
+}
+
 function createInitialAdmin() {
   const username = String(process.env.INITIAL_ADMIN_USERNAME || '').trim().toLowerCase();
   const name = String(process.env.INITIAL_ADMIN_NAME || '').trim();
@@ -1686,7 +1719,7 @@ function createInitialAdmin() {
     id: randomUUID(),
     username,
     name,
-    role: 'admin',
+    role: process.env.INITIAL_ADMIN_ROLE === 'admin' ? 'admin' : 'superadmin',
     active: true,
     snipeItUrl: process.env.SNIPEIT_URL || '',
     snipeItToken: process.env.SNIPEIT_TOKEN || '',
@@ -1799,7 +1832,11 @@ async function requireAuth(req) {
 }
 
 function requireAdmin(user) {
-  if (user.role !== 'admin') throw publicError('Acesso restrito ao administrador.', 403);
+  if (!['admin', 'superadmin'].includes(user.role)) throw publicError('Acesso restrito ao administrador.', 403);
+}
+
+function requireSuperAdmin(user) {
+  if (user.role !== 'superadmin') throw publicError('Acesso restrito ao superadmin.', 403);
 }
 
 function publicUser(user) {

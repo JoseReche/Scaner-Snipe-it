@@ -54,7 +54,9 @@ npm start
 
 Abra `http://localhost:3010`.
 
-No primeiro inicio, defina `INITIAL_ADMIN_USERNAME`, `INITIAL_ADMIN_NAME` e `INITIAL_ADMIN_PASSWORD` no `.env`. A senha deve ter pelo menos 12 caracteres. Para acessar pelo celular na mesma rede, use o IP do servidor, por exemplo `http://192.168.0.3:3010`.
+No primeiro inicio, defina `INITIAL_ADMIN_USERNAME`, `INITIAL_ADMIN_NAME`, `INITIAL_ADMIN_PASSWORD` e `INITIAL_ADMIN_ROLE=superadmin` no `.env`. A senha deve ter pelo menos 12 caracteres. Para acessar pelo celular na mesma rede, use o IP do servidor, por exemplo `http://192.168.0.3:3010`.
+
+Em uma instalacao existente, coloque o nome de usuario do administrador desejado em `INITIAL_ADMIN_USERNAME`, deixe `INITIAL_ADMIN_ROLE=superadmin` e reinicie uma vez. Se ainda nao existir um superadmin, esse usuario sera promovido automaticamente.
 
 ## Configurar o Snipe-IT
 
@@ -161,6 +163,7 @@ SNIPEIT_TOKEN=
 INITIAL_ADMIN_USERNAME=admin-ti
 INITIAL_ADMIN_NAME=Administrador TI
 INITIAL_ADMIN_PASSWORD=coloque_uma_senha_forte_com_12_caracteres
+INITIAL_ADMIN_ROLE=superadmin
 
 DB_CLIENT=mysql
 DB_HOST=127.0.0.1
@@ -273,7 +276,7 @@ A quantidade e a foto ficam dentro de um PDF. Esse PDF e anexado aos `Arquivos` 
 
 ## Dashboard administrativo
 
-Entre com um usuario com perfil `admin` definido no `.env` no primeiro inicio para acessar:
+Entre com um usuario com perfil `admin` ou `superadmin` definido no `.env` no primeiro inicio para acessar:
 
 - resumo de registros, sincronizacoes, erros e atrasos;
 - usuarios e seus tokens configurados;
@@ -283,6 +286,8 @@ Entre com um usuario com perfil `admin` definido no `.env` no primeiro inicio pa
 - marcacao persistente de item ja comprado;
 - exportacao da lista filtrada para CSV;
 - limpeza dos lancamentos do mes, mediante confirmacao.
+
+Somente `superadmin` pode criar ou excluir usuarios. `admin` pode usar o dashboard, mas nao possui acesso a gestao de usuarios. Qualquer usuario autenticado pode alterar a propria senha em `Minha conta`.
 
 ### Itens que necessitam reposicao
 

@@ -99,6 +99,7 @@ $('#backToApp').addEventListener('click', showApp);
 $('#saveConfig').addEventListener('click', saveConfig);
 $('#testConnection').addEventListener('click', testConnection);
 $('#changePassword').addEventListener('click', changePassword);
+$('#passwordToggle').addEventListener('click', () => passwordPanel.classList.toggle('hidden'));
 $('#refreshHistory').addEventListener('click', loadHistory);
 $('#createUser').addEventListener('click', createUser);
 $('#viewOverdueAdmin').addEventListener('click', showAdmin);
@@ -290,7 +291,9 @@ async function bootAuthenticated() {
   loginView.classList.add('hidden');
   appView.classList.remove('hidden');
   topActions.classList.remove('hidden');
-  $('#adminToggle').classList.toggle('hidden', me.role !== 'admin');
+  const canAdmin = ['admin', 'superadmin'].includes(me.role);
+  $('#adminToggle').classList.toggle('hidden', !canAdmin);
+  $('#userManagementSection').classList.toggle('hidden', me.role !== 'superadmin');
   await Promise.all([loadPresets(), loadStatus(), loadHistory(), loadOverdueAlert()]);
   setFlow(activeFlow);
 }
@@ -400,7 +403,12 @@ async function loadOverdueAlert() {
 async function showAdmin() {
   appView.classList.add('hidden');
   adminView.classList.remove('hidden');
-  await Promise.all([loadAdminSummary(), loadUsers(), loadReplenishment(), loadMonthlyAssignments()]);
+  await Promise.all([
+    loadAdminSummary(),
+    me.role === 'superadmin' ? loadUsers() : Promise.resolve(),
+    loadReplenishment(),
+    loadMonthlyAssignments(),
+  ]);
 }
 
 function showApp() {
@@ -556,9 +564,23 @@ async function loadUsers() {
     <article>
       <strong>${escapeHtml(user.name)} (${escapeHtml(user.username)})</strong>
       <span>${escapeHtml(user.role)} - API ${user.hasToken ? 'ok' : 'pendente'}</span>
+      <button type="button" class="danger-button user-delete" data-user-id="${escapeHtml(user.id)}" data-user-name="${escapeHtml(user.name)}">Excluir</button>
     </article>
   `).join('');
 }
+
+$('#usersList').addEventListener('click', async (event) => {
+  const button = event.target.closest('.user-delete');
+  if (!button) return;
+  if (!window.confirm(`Excluir o usuario ${button.dataset.userName || ''}? Esta acao nao pode ser desfeita.`)) return;
+  try {
+    await api(`/api/admin/users/${encodeURIComponent(button.dataset.userId)}`, { method: 'DELETE' });
+    $('#adminMessage').textContent = 'Usuario excluido.';
+    await loadUsers();
+  } catch (error) {
+    $('#adminMessage').textContent = error.message;
+  }
+});
 
 async function createUser() {
   try {

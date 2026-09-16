@@ -532,6 +532,16 @@ textarea {
   font-weight: 700;
 }
 
+.user-delete {
+  margin-top: 8px;
+  border: 1px solid #efb4ad;
+  border-radius: 7px;
+  padding: 6px 10px;
+  background: #fff5f3;
+  color: var(--danger);
+  font-weight: 800;
+}
+
 .admin-list {
   display: grid;
   gap: 8px;

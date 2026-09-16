@@ -94,6 +94,7 @@ SNIPEIT_TOKEN=
 INITIAL_ADMIN_USERNAME=admin-ti
 INITIAL_ADMIN_NAME=Administrador TI
 INITIAL_ADMIN_PASSWORD=coloque_uma_senha_forte_com_12_caracteres
+INITIAL_ADMIN_ROLE=superadmin
 
 DB_CLIENT=mysql
 DB_HOST=127.0.0.1
@@ -105,7 +106,9 @@ DB_CONNECTION_LIMIT=10
 SESSION_TTL_SECONDS=28800
 ```
 
-As credenciais ficam somente no `.env`. O aplicativo nao cria mais uma senha padrao embutida no codigo. Em uma instalacao nova, o primeiro inicio falha de forma segura se a senha inicial nao estiver configurada.
+As credenciais ficam somente no `.env`. O aplicativo nao cria mais uma senha padrao embutida no codigo. Em uma instalacao nova, o primeiro inicio falha de forma segura se a senha inicial nao estiver configurada. O `superadmin` pode criar e excluir usuarios; o `admin` nao pode gerenciar usuarios.
+
+Em uma instalacao existente, informe em `INITIAL_ADMIN_USERNAME` o usuario que deve receber o perfil `superadmin` e reinicie o servico uma vez. A promocao automatica ocorre somente quando ainda nao existe superadmin.
 
 ## 5. Servico systemd
 
