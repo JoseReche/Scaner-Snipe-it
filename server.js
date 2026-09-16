@@ -629,8 +629,16 @@ async function handlePrinters(res) {
 
 async function handleSnipePrinters(res, user) {
   if (!isSnipeConfigured(user)) return sendJson(res, 200, []);
-  const data = await snipeFetch('/api/v1/hardware?limit=100&category_id=24', {}, user);
-  const rows = Array.isArray(data?.rows) ? data.rows : [];
+  const categoryId = '24';
+  const category = await snipeFetch(`/api/v1/categories/${categoryId}`, {}, user).catch(() => ({}));
+  const categoryName = String(category?.name || category?.payload?.name || '').trim().toLowerCase();
+  const filteredData = await snipeFetch(`/api/v1/hardware?limit=100&category_id=${categoryId}`, {}, user);
+  let rows = Array.isArray(filteredData?.rows) ? filteredData.rows : [];
+  if (!rows.length) {
+    const allData = await snipeFetch('/api/v1/hardware?limit=100', {}, user);
+    const allRows = Array.isArray(allData?.rows) ? allData.rows : [];
+    rows = allRows.filter((item) => hardwareBelongsToCategory(item, categoryId, categoryName));
+  }
   const printers = await Promise.all(rows.map(async (item) => {
       const normalized = normalizeEntity(item, 'hardware');
       let detail = item;
@@ -656,6 +664,14 @@ async function handleSnipePrinters(res, user) {
       };
     }));
   sendJson(res, 200, printers);
+}
+
+function hardwareBelongsToCategory(item, categoryId, categoryName) {
+  const category = item?.category || item?.model?.category || {};
+  const itemCategoryId = item?.category_id || item?.model?.category_id || category?.id;
+  if (itemCategoryId !== undefined && String(itemCategoryId) === categoryId) return true;
+  const itemCategoryName = String(category?.name || category || '').trim().toLowerCase();
+  return Boolean(categoryName && itemCategoryName === categoryName);
 }
 
 function normalizeHardwareAccessories(detail) {
