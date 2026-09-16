@@ -466,8 +466,16 @@ async function loadMe() {
     me = await api('/api/me');
     await bootAuthenticated();
   } catch {
-    loginView.classList.remove('hidden');
+    showLoginView();
   }
+}
+
+function showLoginView() {
+  loginView.classList.remove('hidden');
+  appView.classList.add('hidden');
+  adminView.classList.add('hidden');
+  printerView.classList.add('hidden');
+  topActions.classList.add('hidden');
 }
 
 async function loadStatus() {
@@ -1054,6 +1062,7 @@ async function api(url, options = {}) {
   });
   const text = await response.text();
   const data = text ? JSON.parse(text) : {};
+  if (response.status === 401) showLoginView();
   if (!response.ok) throw new Error(data.error || 'Falha na requisicao.');
   return data;
 }
